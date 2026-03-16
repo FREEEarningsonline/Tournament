@@ -1,0 +1,531 @@
+
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <title>Online Tasks Viewer - View Daily Tasks</title> <!-- Title changed -->
+    
+    <!-- Link to the external CSS file -->
+    <style>
+
+/* ===================================================================
+   1. :root VARIABLES
+=================================================================== */
+:root {
+    /* Colors */
+    --primary-color: #007bff;
+    --secondary-color: #28a745;
+    --header-bg: #2c3e50;
+    --card-bg: #ffffff;
+    --body-bg: #f0f2f5;
+    --warning-bg: #ffc107;
+    --button-cyan: #00bcd4;
+    --dark-text: #333;
+    --light-text: #f8f9fa;
+    --subtle-text: #6c757d;
+    --border-color: #dee2e6;
+    /* Removed: --locked-bg, --locked-border */
+
+    /* Fonts */
+    --font-family-main: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    --base-font-size: 16px;
+
+    /* Spacing */
+    --spacing-small: 8px;
+    --spacing-medium: 16px;
+    --spacing-large: 32px;
+
+    /* Effects */
+    --box-shadow-light: 0 4px 8px rgba(0, 0, 0, 0.05);
+    --box-shadow-heavy: 0 8px 25px rgba(0, 0, 0, 0.1);
+    --border-radius: 12px;
+}
+
+
+/* ===================================================================
+   2. GENERAL & RESET STYLES
+=================================================================== */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family: var(--font-family-main);
+    font-size: var(--base-font-size);
+    margin: 0;
+    padding: 0;
+    background-color: var(--body-bg);
+    color: var(--dark-text);
+    line-height: 1.6;
+}
+
+h1, h2, h3 {
+    color: var(--header-bg);
+    margin-top: 0;
+    margin-bottom: var(--spacing-medium);
+}
+
+p {
+    margin-top: 0;
+    margin-bottom: var(--spacing-medium);
+}
+
+a {
+    color: var(--primary-color);
+    text-decoration: none;
+    transition: color 0.3s ease;
+}
+
+a:hover {
+    color: #0056b3;
+}
+
+
+/* ===================================================================
+   3. LAYOUT & STRUCTURE
+=================================================================== */
+
+/* --- Header --- */
+header {
+    background-color: var(--header-bg);
+    color: var(--light-text);
+    padding: var(--spacing-medium) var(--spacing-medium);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
+
+header h1 {
+    font-size: 1.2em;
+    color: var(--light-text);
+    margin: 0;
+}
+
+/* Removed .header-right and its children styles */
+
+/* --- Main Container & Sections --- */
+.container { /* .auth-container removed */
+    width: 95%;
+    max-width: 1200px;
+    margin: var(--spacing-large) auto;
+    padding: 0;
+}
+
+section {
+    display: none; /* Will be managed by JS to show the current active section */
+    background-color: var(--card-bg);
+    padding: var(--spacing-large);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow-heavy);
+}
+
+.back-link {
+    display: inline-block;
+    margin-bottom: var(--spacing-medium);
+    font-weight: bold;
+}
+
+
+/* ===================================================================
+   4. COMPONENTS
+=================================================================== */
+
+/* --- Category List --- */
+.category-list {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--spacing-medium);
+}
+
+.category-btn {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    padding: var(--spacing-large);
+    border-radius: var(--border-radius);
+    text-align: center;
+    cursor: pointer;
+    transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+    box-shadow: var(--box-shadow-light);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-small);
+}
+
+.category-btn:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--box-shadow-heavy);
+    border-color: var(--primary-color);
+}
+
+.category-btn i {
+    font-size: 36px;
+    margin-bottom: var(--spacing-small);
+}
+
+.category-btn span {
+    font-weight: bold;
+    font-size: 1.1em;
+    color: var(--dark-text);
+}
+
+/* --- Task List & Cards --- */
+#taskList {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--spacing-large);
+}
+
+.task-card {
+    background-color: var(--card-bg); /* Changed to light background */
+    padding: var(--spacing-large);
+    border-radius: var(--border-radius);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1); /* Lighter shadow */
+    text-align: center;
+    color: var(--dark-text); /* Changed to dark text */
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.3s ease; /* opacity transition removed */
+    position: relative; 
+    border: 1px solid var(--border-color); /* Added border for clarity */
+}
+
+.task-card:hover { /* Simplified hover, no opacity check */
+    transform: scale(1.02);
+}
+
+.task-title {
+    font-size: 1.3em;
+    font-weight: bold;
+    color: var(--header-bg); /* Changed to header-bg color */
+}
+
+.task-platform {
+    color: var(--subtle-text); /* Changed to subtle text */
+    margin-bottom: var(--spacing-medium);
+}
+
+.warning-box {
+    background-color: rgba(255, 193, 7, 0.1);
+    color: var(--dark-text); /* Changed to dark text */
+    padding: var(--spacing-medium);
+    border-radius: 8px;
+    border-left: 5px solid var(--warning-bg);
+    margin-bottom: var(--spacing-medium);
+    text-align: right;
+    direction: rtl;
+    flex-grow: 1;
+}
+
+.earn-button {
+    background: var(--button-cyan);
+    color: var(--dark-text);
+    border: none;
+    padding: var(--spacing-medium) var(--spacing-large);
+    border-radius: 8px;
+    font-size: 1.1em;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 0 15px rgba(0, 188, 212, 0.5);
+    width: 100%;
+    transition: all 0.3s ease;
+    margin-top: auto;
+    
+    display: flex; 
+    align-items: center; 
+    justify-content: center;
+}
+
+.earn-button:hover { /* Simplified hover */
+    background: #00e0e0;
+    box-shadow: 0 0 20px rgba(0, 255, 255, 0.8);
+    transform: scale(1.05);
+}
+
+/* Removed all TASK LOCK SPECIFIC STYLES */
+
+
+/* Removed Auth Modal & Signup Page styles */
+/* Removed Success Popup styles */
+
+
+/* ===================================================================
+   6. RESPONSIVE DESIGN (Media Queries)
+=================================================================== */
+
+/* --- 6.1 TABLET VIEW --- */
+@media (min-width: 768px) {
+    header h1 {
+        font-size: 1.5em;
+    }
+
+    .category-list {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    #taskList {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+
+/* --- 6.2 DESKTOP VIEW --- */
+@media (min-width: 1024px) {
+    .category-list {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    #taskList {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    section {
+        padding: 40px;
+    }
+}
+</style>
+    
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
+    <!-- FIREBASE SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <!-- Removed: firebase-auth.js -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+</head>
+<body>
+
+    <header>
+        <h1 id="mainHeaderTitle">Online Tasks Viewer</h1> <!-- Updated Header Title -->
+        <!-- Removed: header-right div -->
+    </header>
+
+    <main class="container">
+        <!-- Removed: 1. ARTICLE SECTION (Logged Out View) -->
+        
+        <!-- 2. CATEGORY SECTION (Now the initial view) -->
+        <section id="categoryMainSection">
+            <h2>Tasks Ki Categories Chunein</h2>
+            <div class="category-list">
+                <a onclick="showTaskListView('YouTube')" class="category-btn"><i class="fab fa-youtube" style="color: red;"></i><span>YouTube Tasks</span></a>
+                <a onclick="showTaskListView('TikTok')" class="category-btn"><i class="fab fa-tiktok" style="color: #69c9d0;"></i><span>TikTok Tasks</span></a>
+                <a onclick="showTaskListView('Instagram')" class="category-btn"><i class="fab fa-instagram" style="color: #E1306C;"></i><span>Instagram Tasks</span></a>
+                <a onclick="showTaskListView('WhatsApp Channel')" class="category-btn"><i class="fab fa-whatsapp" style="color: #25D366;"></i><span>WhatsApp Channel</span></a>
+                <a onclick="showTaskListView('WhatsApp Group')" class="category-btn"><i class="fas fa-users" style="color: #128C7E;"></i><span>WhatsApp Group</span></a>
+                <a onclick="showTaskListView('App Install')" class="category-btn"><i class="fas fa-download" style="color: #007bff;"></i><span>App Install</span></a> 
+                <a onclick="showTaskListView('Website')" class="category-btn"><i class="fas fa-globe" style="color: #3498db;"></i><span>Website Visit</span></a>
+                <a onclick="showTaskListView('General')" class="category-btn"><i class="fas fa-list" style="color: #555;"></i><span>Other Tasks</span></a>
+            </div>
+        </section>
+
+        <!-- 3. TASK LIST SECTION -->
+        <section id="taskMainSection">
+            <a onclick="showCategoryView()" class="back-link">← Wapas Categories Par Jaen</a>
+            <h2 id="taskListHeaderTitle">Tasks</h2>
+            <div id="taskList"><p style="text-align: center;">Tasks load ho rahe hain...</p></div>
+        </section>
+    </main>
+    
+    <!-- Removed: AUTH MODAL (Login & Signup) -->
+    <!-- Removed: Success Popup -->
+
+    <!-- External JavaScript File Link -->
+    <script>
+// =========================================================================
+// FIREBASE INITIALIZATION & CONFIGURATION
+// =========================================================================
+
+const firebaseConfig = {
+    apiKey: "AIzaSyDNYv9SNUjMAHlaPzfovyYefoBNDgx4Gd4",
+    authDomain: "traffic-exchange-62a58.firebaseapp.com",
+    projectId: "traffic-exchange-62a58",
+    storageBucket: "traffic-exchange-62a58.appspot.com",
+    messagingSenderId: "474999317287",
+    appId: "1:474999317287:web:8e28a2f5f1a959d8ce3f02",
+    measurementId: "G-HJQ46RQNZS"
+};
+
+// --- INITIALIZE FIREBASE APP ---
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
+
+// --- FIREBASE SERVICES ---
+// Removed: const auth = firebase.auth();
+const db = firebase.firestore();
+// Removed: const TASK_REWARD_SOURCE = 'Task'; 
+
+// =========================================================================
+// DOM ELEMENTS & INITIAL STATE
+// =========================================================================
+
+// --- DOM ELEMENTS ---
+// Removed: articleSection
+const categoryMainSection = document.getElementById('categoryMainSection');
+const taskMainSection = document.getElementById('taskMainSection');
+const taskList = document.getElementById('taskList');
+// Removed: profileIconButton, authModal, successPopup, userEmailDisplay, coinsBalanceDisplay, userInfoDiv
+const mainHeaderTitle = document.getElementById('mainHeaderTitle');
+const taskListHeaderTitle = document.getElementById('taskListHeaderTitle');
+// Removed: loginView, signupView, authMessage, toggleSignupLink, toggleLoginLink
+
+
+let allTasks = []; 
+// Removed: currentUser, userTaskLocks
+
+// =========================================================================
+// UI CONTROL
+// =========================================================================
+
+function showView(viewName) {
+    if (!categoryMainSection || !taskMainSection) return;
+    
+    categoryMainSection.style.display = 'none';
+    taskMainSection.style.display = 'none';
+    
+    if (viewName === 'categories') {
+        categoryMainSection.style.display = 'block';
+        mainHeaderTitle.textContent = 'Tasks Categories';
+    } else if (viewName === 'tasks') {
+        taskMainSection.style.display = 'block';
+    }
+}
+window.showCategoryView = function() { showView('categories'); }
+window.showTaskListView = function(platform) {
+    const cleanPlatform = platform.trim(); 
+    mainHeaderTitle.textContent = `${cleanPlatform} Tasks`;
+    taskListHeaderTitle.textContent = `${cleanPlatform} Tasks`;
+    showView('tasks');
+    renderTasks(cleanPlatform); 
+}
+
+// Removed: profileIconButton.addEventListener
+// Removed: toggleAuthView and related listeners
+// Removed: loginForm and signupForm listeners
+// Removed: auth.onAuthStateChanged
+
+// =========================================================================
+// TASK LOCKING LOGIC (Removed)
+// =========================================================================
+// All task locking functions are removed.
+
+// =========================================================================
+// DATA & TASK LOGIC
+// =========================================================================
+
+// Removed: addCoinsToWallet
+// Removed: showSuccessPopup
+// Removed: listenToWallet
+
+function fetchTasks() {
+    db.collection('tasks').where('status', '==', 'Approved').onSnapshot(snapshot => {
+        allTasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        // If currently on the tasks list view, re-render tasks for the active category
+        if (taskMainSection && taskMainSection.style.display === 'block') {
+            const currentPlatform = taskListHeaderTitle.textContent.replace(' Tasks', '').trim();
+            renderTasks(currentPlatform);
+        }
+    }, error => {
+        console.error("Error fetching tasks:", error);
+        taskList.innerHTML = `<p style="text-align: center; color: ${getComputedStyle(document.documentElement).getPropertyValue('--dark-text').trim()}">Tasks load nahi ho sake. Connection check karen ya bad mein dobara koshish karen.</p>`;
+    });
+}
+
+function renderTasks(platform) {
+    taskList.innerHTML = ''; // Clear existing tasks
+    
+    let filteredTasks = allTasks.filter(task => task.platform === platform);
+    
+    if (filteredTasks.length === 0) {
+        taskList.innerHTML = `<p style="text-align: center; color: ${getComputedStyle(document.documentElement).getPropertyValue('--dark-text').trim()}">Is category mein koi task maujood nahi hai.</p>`;
+        return;
+    }
+    
+    filteredTasks.forEach(task => {
+        let warningText = "اہم انتباہ: اس ٹاسک کو ہدایات کے مطابق مکمل کریں۔"; // Simplified warning
+        if (task.platform === 'App Install' || task.type === 'Review App') {
+            warningText = "اہم: App install/review karne ke baad usay thori der use karein. (Proof ki zaroorat nahi)"; // Simplified for no earning
+        }
+
+        const card = document.createElement('div');
+        card.className = 'task-card';
+        // Removed: card.style.opacity based on lock status
+        card.innerHTML = `
+            <div class="task-title">${task.linkTitle || task.type}</div>
+            <div class="task-platform">${task.platform} - ${task.type || 'Click'}</div>
+            <div class="warning-box">
+                <div class="urdu">${warningText}</div>
+            </div>
+            <button class="earn-button" 
+                    data-link="${task.link}" 
+                    data-platform="${task.platform}" 
+                    data-type="${task.type || 'Click'}"
+                    onclick="handleTaskClick(this)">
+                Open Link
+            </button>`;
+        taskList.appendChild(card);
+    });
+}
+
+function openAppLink(webUrl, platform) {
+    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+    let os = 'desktop';
+    if (/android/i.test(userAgent)) os = 'android';
+    if (/iPad|iPhone|iPod/.test(userAgent) && !window.MSStream) os = 'ios';
+
+    let appUrl = webUrl;
+    const platformLower = platform.toLowerCase();
+    
+    try {
+        if (platformLower === 'tiktok') {
+            appUrl = `tiktok://openurl?url=${encodeURIComponent(webUrl)}`; 
+        } 
+        
+    } catch (e) { console.error("URL parse error:", e); }
+
+    if (os !== 'desktop' && platformLower !== 'app install' && platformLower !== 'website') {
+        window.location.href = appUrl;
+        setTimeout(() => { window.open(webUrl, '_blank'); }, 2500);
+    } else {
+        window.open(webUrl, '_blank');
+    }
+}
+
+window.handleTaskClick = function(button) { // Simplified function
+    const link = button.dataset.link;
+    const platform = button.dataset.platform;
+    const type = button.dataset.type;
+    
+    let finalWebUrl = link;
+    if (platform.toLowerCase() === 'youtube' && type.toLowerCase() === 'subscribe') {
+        if (!link.includes('sub_confirmation=1')) {
+            finalWebUrl = link + (link.includes('?') ? '&' : '?') + 'sub_confirmation=1';
+        }
+    }
+    openAppLink(finalWebUrl, platform);
+}
+
+// =========================================================================
+// INITIAL LOAD
+// =========================================================================
+
+// Start by fetching tasks and then showing the categories view
+fetchTasks();
+showView('categories'); // Show categories section immediately on load
+
+</script>
+
+</body>
+</html>
