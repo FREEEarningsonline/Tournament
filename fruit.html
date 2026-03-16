@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Emoji Fruit Slicer</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Righteous&family=Bangers&display=swap');
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Righteous', cursive;
+            background-color: #333;
+            color: white;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            height: 100dvh; /* More reliable for mobile viewport height */
+            touch-action: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 700px;
+            height: 100%;
+            max-height: 550px;
+            background-image: url('https://www.transparenttextures.com/patterns/wood-pattern.png');
+            background-color: #8B4513;
+            border: 5px solid #532d0f;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            overflow: hidden; /* Crucial for canvas and internal elements */
+        }
+
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewport='0 0 100 100' style='fill:black;font-size:24px;'><text y='50%'>🔪</text></svg>") 16 16, auto;
+        }
+
+        #ui-container {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            right: 15px;
+            display: flex;
+            justify-content: space-between;
+            font-size: clamp(20px, 5vw, 30px);
+            pointer-events: none;
+            text-shadow: 2px 2px 5px rgba(0,0,0,0.5);
+            font-family: 'Fredoka One', cursive;
+            z-index: 5; /* Ensure UI is above canvas content */
+        }
+
+        #score-board, #lives-board {
+            padding: 8px 15px;
+            background-color: rgba(0,0,0,0.4);
+            border-radius: 10px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+        }
+        #score-board span, #lives-board span {
+            display: inline-block;
+            min-width: 30px;
+            text-align: right;
+        }
+        .life-heart {
+            color: red;
+            font-size: clamp(20px, 4vw, 28px);
+            margin-left: 2px;
+            animation: pulse 1.5s infinite alternate;
+        }
+        @keyframes pulse {
+            to { transform: scale(1.1); }
+        }
+
+        #start-screen, #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.75);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            z-index: 10;
+            backdrop-filter: blur(5px);
+        }
+
+        #start-screen h1, #game-over-screen h1 {
+            font-size: clamp(40px, 10vw, 70px);
+            margin-bottom: 25px;
+            color: #FFD700;
+            text-shadow: 3px 3px 0px #c00, 0 0 20px #ffc107;
+        }
+
+        #start-screen p, #game-over-screen p {
+            font-size: clamp(20px, 5vw, 32px);
+            margin-bottom: 35px;
+        }
+
+        #startButton, #restartButton {
+            padding: 18px 35px;
+            font-size: clamp(18px, 4.5vw, 28px);
+            font-family: 'Fredoka One', cursive;
+            background: linear-gradient(145deg, #ff8c00, #ff5722);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 6px 0px #c04000, 0 8px 15px rgba(0,0,0,0.3);
+            transition: all 0.15s ease-out;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        #startButton:hover, #restartButton:hover {
+            background: linear-gradient(145deg, #ff9c1a, #ff673a);
+            box-shadow: 0 4px 0px #c04000, 0 6px 10px rgba(0,0,0,0.4);
+            transform: translateY(-2px);
+        }
+        #startButton:active, #restartButton:active {
+            background: linear-gradient(145deg, #e07c00, #e04712);
+            box-shadow: 0 2px 0px #c04000, 0 3px 5px rgba(0,0,0,0.5);
+            transform: translateY(2px);
+        }
+
+        #combo-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: 'Bangers', cursive;
+            font-size: 0px; /* Initial state for animation */
+            color: #FFF;
+            text-shadow:
+                -2px -2px 0 #ff6600,
+                 2px -2px 0 #ff6600,
+                -2px  2px 0 #ff6600,
+                 2px  2px 0 #ff6600,
+                 4px 4px 5px rgba(0,0,0,0.7);
+            opacity: 0;
+            transition: font-size 0.2s ease-out, opacity 0.2s ease-out, transform 0.2s ease-out;
+            pointer-events: none;
+            z-index: 6; /* Above canvas, below screens */
+        }
+        #combo-text.show {
+            font-size: clamp(60px, 15vw, 100px);
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1.1);
+        }
+         #combo-text.fade {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.8);
+            font-size: clamp(50px, 12vw, 80px);
+        }
+
+        /* Ad Banner Styling */
+        #ad-banner-container {
+            display: none; /* Hidden by default, shown on mobile via media query */
+            justify-content: center;
+            align-items: center;
+            position: fixed; /* Stick to bottom of viewport */
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 50px; /* Ad height */
+            background-color: #000000; /* Fallback BG if ad doesn't load, helps verify positioning */
+            z-index: 1000; /* High z-index to be on top */
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 600px) and (orientation: portrait) {
+            #game-container {
+                max-width: 100vw;
+                height: calc(100dvh - 50px); /* Adjust height to make space for the 50px ad banner */
+                max-height: calc(100dvh - 50px); /* Ensure max-height also respects the ad space */
+                border-radius: 0;
+                border: none;
+            }
+            #ad-banner-container {
+                display: flex; /* Show ad banner on mobile portrait */
+            }
+        }
+
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="combo-text"></div>
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui-container">
+            <div id="score-board">Score: <span id="score">0</span></div>
+            <div id="lives-board">Lives: <span id="lives-emojis">❤️❤️❤️</span></div>
+        </div>
+        <div id="start-screen">
+            <h1>Emoji Slicer!</h1>
+            <button id="startButton">Slice 'Em!</button>
+        </div>
+        <div id="game-over-screen" style="display: none;">
+            <h1>Game Over!</h1>
+            <p>Your Score: <span id="finalScore">0</span></p>
+            <button id="restartButton">Slice Again?</button>
+        </div>
+    </div>
+
+ 
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+
+            const gameContainer = document.getElementById('game-container');
+            const startScreen = document.getElementById('start-screen');
+            const gameOverScreen = document.getElementById('game-over-screen');
+            const startButton = document.getElementById('startButton');
+            const restartButton = document.getElementById('restartButton');
+            const scoreDisplay = document.getElementById('score');
+            const livesEmojisDisplay = document.getElementById('lives-emojis');
+            const finalScoreDisplay = document.getElementById('finalScore');
+            const comboTextElement = document.getElementById('combo-text');
+
+            const FRUITS_EMOJIS = ['🍎', '🍌', '🍉', '🍊', '🍓', '🍍', '🥝', '🍑', '🍒', '🥭'];
+            const BOMB_EMOJI = '💣';
+            const SPLATTER_EMOJIS = ['💦', '💧', '✨', '💥']; // Keeping these, good effects
+
+            // Placeholder sound URLs, replace with your actual files or valid URLs
+            const sounds = {
+                slice: new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"), // Placeholder
+                bomb: new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"), // Placeholder
+                gameOver: new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"), // Placeholder
+                miss: new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"), // Placeholder
+                combo: new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA")  // Placeholder
+            };
+            // Using silent WAVs as placeholders to avoid 404s if actual files aren't present.
+            // Replace these base64 strings or the new Audio() calls with your actual sound files/URLs.
+
+            const silentAudio = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA");
+
+            Object.values(sounds).forEach(sound => { sound.preload = 'auto'; });
+
+            function playAudio(sound) {
+                if (!sound || !audioUnlocked) return; // Check audioUnlocked
+                sound.currentTime = 0;
+                const playPromise = sound.play();
+                if (playPromise !== undefined) {
+                    playPromise.catch(error => {
+                        // console.warn("Audio play failed:", error);
+                    });
+                }
+            }
+
+
+            let score = 0;
+            let lives = 3;
+            let gameActive = false;
+            let objects = [];
+            let particles = [];
+            let sliceTrail = [];
+            const MAX_TRAIL_LENGTH = 15;
+            let isSlicing = false;
+
+            let currentCombo = 0;
+            let fruitsSlicedThisSwipe = 0;
+            const COMBO_THRESHOLD = 3;
+            const COMBO_BONUS_POINTS = 5;
+            let comboTimeout;
+
+            const baseEmojiSize = () => {
+                const smallerDimension = Math.min(canvas.width, canvas.height);
+                if (canvas.width < 450 || canvas.height < 450) { // Mobile or small screens
+                    return smallerDimension * 0.16; // Slightly larger emojis relative to screen
+                } else if (canvas.width < 700) { // Medium screens
+                    return smallerDimension * 0.13;
+                } else { // Larger desktop screens
+                    return smallerDimension * 0.09;
+                }
+            };
+            const pointsPerFruit = 10;
+
+            function resizeCanvas() {
+                // Ensure gameContainer is the one measured, not the canvas itself before resizing
+                const availableWidth = gameContainer.clientWidth;
+                const availableHeight = gameContainer.clientHeight;
+
+                canvas.width = availableWidth;
+                canvas.height = availableHeight;
+
+                // Update font size for existing objects if necessary
+                objects.forEach(obj => {
+                    obj.fontSize = baseEmojiSize() * obj.scale;
+                    obj.radius = obj.fontSize * 0.4; // Recalculate radius
+                });
+                // Also for particles if they use baseEmojiSize related calculations
+                particles.forEach(p => {
+                    if (p.isEmojiParticle) {
+                         p.fontSize = baseEmojiSize() * 0.7; // Example if particle size is related
+                    }
+                });
+
+                // If game is not active, may need to redraw static elements on canvas if any
+                // For this game, overlays are HTML, so this might not be strictly needed for them.
+            }
+            window.addEventListener('resize', resizeCanvas);
+
+            class GameObject {
+                 constructor(x, y, emoji) {
+                    this.x = x;
+                    this.y = y;
+                    this.emoji = emoji;
+                    this.isBomb = emoji === BOMB_EMOJI;
+                    this.scale = 0.8 + Math.random() * 0.4;
+                    this.fontSize = baseEmojiSize() * this.scale;
+                    this.radius = this.fontSize * 0.4; // collision radius
+
+                    this.velocityX = 0;
+                    this.velocityY = 0;
+                    // Scale gravity slightly with canvas height for more consistent feel across sizes
+                    this.gravity = 0.15 * (Math.max(300, canvas.height) / 600) + (Math.random() * 0.02);
+                    this.rotation = (Math.random() - 0.5) * Math.PI;
+                    this.rotationSpeed = (Math.random() - 0.5) * 0.05;
+
+                    this.sliced = false;
+                    this.sliceParts = [];
+                    this.id = Math.random().toString(36).substr(2, 9); // Unique ID for combo tracking
+                }
+
+                update() {
+                    if (!this.sliced) {
+                        this.velocityY += this.gravity;
+                        this.x += this.velocityX;
+                        this.y += this.velocityY;
+                        this.rotation += this.rotationSpeed;
+
+                        // Wall bounce logic
+                        if (this.x - this.radius < 0 && this.velocityX < 0) { // Left wall
+                            this.x = this.radius;
+                            this.velocityX *= -0.7; // Dampen bounce
+                            this.rotationSpeed *= -0.5; // Reverse/dampen rotation
+                        }
+                        else if (this.x + this.radius > canvas.width && this.velocityX > 0) { // Right wall
+                            this.x = canvas.width - this.radius;
+                            this.velocityX *= -0.7;
+                            this.rotationSpeed *= -0.5;
+                        }
+
+                        // Optional: Top bounce (if objects are thrown very high)
+                        if (this.y - this.radius < 0 && this.velocityY < 0) {
+                            this.y = this.radius;
+                            this.velocityY *= -0.3; // Softer bounce from top
+                        }
+
+                    } else { // If sliced, update its parts
+                        this.sliceParts.forEach(part => {
+                            part.velocityY += this.gravity * 1.1; // Sliced parts fall a bit faster/heavier
+                            part.x += part.velocityX;
+                            part.y += part.velocityY;
+                            part.alpha -= 0.018; // Fade out rate
+                            part.rotation += part.rotationSpeed;
+                        });
+                        this.sliceParts = this.sliceParts.filter(p => p.alpha > 0);
+                    }
+
+                    // Check if object is off-screen (bottom)
+                    if (this.y - this.radius > canvas.height + this.fontSize && !this.sliced) {
+                        if (!this.isBomb) {
+                            loseLife(true); // Pass true to indicate missed fruit
+                        }
+                        return false; // Remove object
+                    }
+                    // If sliced and all parts have faded, remove object
+                    if (this.sliced && this.sliceParts.length === 0) {
+                        return false;
+                    }
+                    return true; // Keep object
+                }
+
+                draw() {
+                    ctx.font = `${this.fontSize}px Arial`; // Ensure font size is set per object
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+
+                    if (!this.sliced) {
+                        ctx.save();
+                        ctx.translate(this.x, this.y);
+                        ctx.rotate(this.rotation);
+                        ctx.fillText(this.emoji, 0, 0);
+                        ctx.restore();
+                    } else {
+                        this.sliceParts.forEach(part => {
+                            ctx.save();
+                            ctx.globalAlpha = part.alpha;
+                            ctx.translate(part.x, part.y);
+                            ctx.rotate(part.rotation);
+                            ctx.font = `${part.fontSize}px Arial`; // Parts might have different size
+                            ctx.fillText(part.emoji, 0, 0);
+                            ctx.restore();
+                        });
+                    }
+                }
+
+                slice(sliceAngle) {
+                    if (this.sliced) return;
+                    this.sliced = true;
+
+                    createSplatter(this.x, this.y, this.isBomb);
+
+                    if (this.isBomb) {
+                        playAudio(sounds.bomb);
+                        resetCombo(); // Bomb breaks combo
+                        // Game over is handled in handleSliceMove after detecting bomb slice
+                        return; // Bomb specific actions end here for the object itself
+                    } else {
+                        // Fruit slice
+                        playAudio(sounds.slice);
+                        incrementCombo(this.id); // Pass ID to avoid double counting
+                    }
+
+                    // Create two pieces for the sliced fruit
+                    const numParts = 2;
+                    const partSpeedBase = this.radius * 0.15; // Base speed for parts flying off
+
+                    for (let i = 0; i < numParts; i++) {
+                        // Angle parts to fly away from the slice direction
+                        const angleOffset = (i === 0) ? -Math.PI / 3.5 : Math.PI / 3.5; // Spread angle
+                        const partSpeed = partSpeedBase + Math.random() * partSpeedBase * 0.5; // Slight speed variation
+                        this.sliceParts.push({
+                            emoji: this.emoji,
+                            x: this.x,
+                            y: this.y,
+                            fontSize: this.fontSize * 0.75, // Sliced parts are smaller
+                            velocityX: this.velocityX * 0.3 + Math.cos(sliceAngle + angleOffset) * partSpeed,
+                            velocityY: this.velocityY * 0.3 + Math.sin(sliceAngle + angleOffset) * partSpeed - (this.radius * 0.08), // Slight upward pop
+                            rotation: this.rotation,
+                            rotationSpeed: (Math.random() - 0.5) * 0.25, // Random spin for parts
+                            alpha: 1.0
+                        });
+                    }
+                }
+            }
+
+            class Particle {
+                constructor(x, y, color, size, velocityX, velocityY) {
+                    this.x = x; this.y = y; this.color = color; this.size = size;
+                    this.velocityX = velocityX; this.velocityY = velocityY;
+                    this.alpha = 1.0; this.gravity = 0.08; // Particles are lighter
+                }
+                update() {
+                    this.velocityY += this.gravity; this.x += this.velocityX; this.y += this.velocityY;
+                    this.alpha -= 0.025; return this.alpha > 0;
+                }
+                draw() {
+                    ctx.save(); ctx.globalAlpha = this.alpha; ctx.fillStyle = this.color;
+                    ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill();
+                    ctx.restore();
+                }
+            }
+
+            function createSplatter(x, y, isBombEffect) {
+                const numParticles = isBombEffect ? 35 : 20;
+                const baseColor = isBombEffect ? 'orange' : '#ff6347'; // Tomato color for fruit
+                for (let i = 0; i < numParticles; i++) {
+                    const size = Math.random() * (isBombEffect ? 9 : 6) + 2;
+                    const speed = Math.random() * (isBombEffect ? 8 : 5) + 1.5;
+                    const angle = Math.random() * Math.PI * 2;
+                    const velocityX = Math.cos(angle) * speed;
+                    const velocityY = Math.sin(angle) * speed - (isBombEffect ? 2.5 : 1.5) ; // Upward thrust
+                    const color = isBombEffect ? (Math.random() < 0.6 ? 'yellow' : 'red') : baseColor;
+                    particles.push(new Particle(x, y, color, size, velocityX, velocityY));
+                }
+                // Add emoji splatter for fruits
+                if (!isBombEffect) {
+                    const splatterEmoji = SPLATTER_EMOJIS[Math.floor(Math.random() * SPLATTER_EMOJIS.length)];
+                    particles.push({
+                        emoji: splatterEmoji, x: x, y: y, fontSize: baseEmojiSize() * 0.7, alpha: 1.0, isEmojiParticle: true,
+                        update: function() { this.alpha -= 0.04; return this.alpha > 0;},
+                        draw: function() {
+                            ctx.save(); ctx.globalAlpha = this.alpha; ctx.font = `${this.fontSize}px Arial`;
+                            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                            ctx.fillText(this.emoji, this.x, this.y); ctx.restore();
+                        }
+                    });
+                }
+            }
+            let slicedFruitIDsThisSwipe = new Set();
+
+            function incrementCombo(fruitID) {
+                if (slicedFruitIDsThisSwipe.has(fruitID)) return; // Already counted this fruit in this swipe
+
+                slicedFruitIDsThisSwipe.add(fruitID);
+                fruitsSlicedThisSwipe++; // This counts unique fruits in the current swipe
+                currentCombo = fruitsSlicedThisSwipe; // Update current combo display variable
+
+                if (currentCombo >= COMBO_THRESHOLD) {
+                    score += COMBO_BONUS_POINTS; // Add bonus for each fruit in a combo >= threshold
+                    // The base pointsPerFruit are added in handleSliceMove
+                    scoreDisplay.textContent = score;
+                    showComboText(currentCombo);
+                    if (currentCombo === COMBO_THRESHOLD) { // Play combo sound once when threshold is met
+                        playAudio(sounds.combo);
+                    }
+                }
+                clearTimeout(comboTimeout);
+                // Combo resets if swipe ends OR if too much time passes without a new slice in the swipe
+                comboTimeout = setTimeout(resetComboOnTimeout, 800);
+            }
+
+
+            function showComboText(count) {
+                comboTextElement.textContent = `COMBO ${count}X!`;
+                comboTextElement.classList.remove('fade');
+                comboTextElement.classList.add('show');
+                // Timeout to start fade out
+                setTimeout(() => {
+                    comboTextElement.classList.remove('show');
+                    comboTextElement.classList.add('fade');
+                }, 600);
+                // Timeout to fully remove fade class for next appearance
+                 setTimeout(() => {
+                    // Only remove fade if it's not currently trying to show (e.g. rapid combos)
+                    if (!comboTextElement.classList.contains('show')) {
+                        comboTextElement.classList.remove('fade');
+                    }
+                }, 800); // Duration of fade out should match transition
+            }
+
+            function resetCombo() {
+                currentCombo = 0;
+                fruitsSlicedThisSwipe = 0;
+                slicedFruitIDsThisSwipe.clear();
+            }
+            function resetComboOnTimeout() {
+                if (isSlicing) return; // If still slicing, don't reset combo due to timeout
+                resetCombo();
+            }
+
+
+            function spawnObject() {
+                if (!gameActive || objects.length > 10) return; // Limit max objects on screen
+
+                const isBombSpawn = Math.random() < 0.15; // Bomb probability
+                const emoji = isBombSpawn ? BOMB_EMOJI : FRUITS_EMOJIS[Math.floor(Math.random() * FRUITS_EMOJIS.length)];
+
+                // Use current baseEmojiSize for accurate initial sizing
+                const currentBaseSize = baseEmojiSize();
+                const objectScale = 0.8 + Math.random() * 0.4;
+                const objectInitialActualSize = currentBaseSize * objectScale;
+
+
+                let x, y, velX, velY;
+                const spawnEdge = Math.random(); // Determines spawn location
+
+                // Velocities scaled with canvas dimensions for somewhat consistent feel
+                const baseThrowSpeedY = canvas.height / 50 + Math.random() * (canvas.height / 120);
+                const baseSideSpeedX = canvas.width / 70 + Math.random() * (canvas.width / 150);
+
+
+                if (spawnEdge < 0.7 || canvas.height < 350) { // Spawn from bottom (more frequent or if screen is short)
+                    x = Math.random() * (canvas.width * 0.8) + (canvas.width * 0.1); // Avoid extreme edges
+                    y = canvas.height + objectInitialActualSize; // Start below screen
+                    velX = (Math.random() - 0.5) * (canvas.width / 70); // Horizontal variation
+                    velY = -baseThrowSpeedY;
+                } else if (spawnEdge < 0.85) { // Spawn from left
+                    x = -objectInitialActualSize; // Start off-screen left
+                    y = Math.random() * (canvas.height * 0.5) + (canvas.height * 0.25); // Mid-upper part of screen
+                    velX = baseSideSpeedX * (0.8 + Math.random() * 0.4); // Push right
+                    velY = -(Math.random() * (baseThrowSpeedY / 3.5) + (baseThrowSpeedY / 5.5)); // Slight upward component
+                } else { // Spawn from right
+                    x = canvas.width + objectInitialActualSize; // Start off-screen right
+                    y = Math.random() * (canvas.height * 0.5) + (canvas.height * 0.25);
+                    velX = -baseSideSpeedX * (0.8 + Math.random() * 0.4); // Push left
+                    velY = -(Math.random() * (baseThrowSpeedY / 3.5) + (baseThrowSpeedY / 5.5));
+                }
+
+                const newObj = new GameObject(x, y, emoji);
+                newObj.velocityX = velX;
+                newObj.velocityY = velY;
+                // Ensure new object gets the correct current scale and radius if baseEmojiSize changed
+                newObj.fontSize = currentBaseSize * newObj.scale;
+                newObj.radius = newObj.fontSize * 0.4;
+
+
+                objects.push(newObj);
+
+                // Chance to spawn another object quickly for bursts
+                if (Math.random() < 0.35 && objects.length < 8) {
+                    setTimeout(spawnObject, 150 + Math.random() * 250);
+                }
+            }
+
+            let spawnIntervalId; // Use ID for clearInterval
+            function startGame() {
+                score = 0; lives = 3; objects = []; particles = []; sliceTrail = [];
+                gameActive = true;
+                resetCombo(); // Reset combo stats
+                scoreDisplay.textContent = score;
+                updateLivesDisplay();
+                startScreen.style.display = 'none';
+                gameOverScreen.style.display = 'none';
+                gameContainer.style.animation = ''; // Clear any previous bomb flash
+
+                resizeCanvas(); // Critical: ensure canvas is sized correctly before game starts and objects spawn
+
+                unlockInitialAudio(); // Try to unlock audio on game start if not already
+
+                clearInterval(spawnIntervalId); // Clear previous interval if any
+                function scheduleNextSpawn() {
+                    if (!gameActive) return;
+                    // Difficulty scaling: spawn faster as score increases, but with limits
+                    let spawnFrequency = 1100 - (score * 2.5);
+                    spawnFrequency = Math.max(300, Math.min(1300, spawnFrequency)); // Clamp frequency
+                    spawnIntervalId = setTimeout(() => {
+                        spawnObject();
+                        scheduleNextSpawn(); // Schedule the next one
+                    }, spawnFrequency + Math.random() * (spawnFrequency / 3.5)); // Add some randomness
+                }
+                spawnObject(); // Initial spawn
+                scheduleNextSpawn(); // Start the spawn loop
+
+                gameLoop(); // Start game animation loop
+            }
+
+            function gameOver(hitBomb = false) {
+                if (!gameActive) return; // Prevent multiple game overs
+                gameActive = false;
+                clearInterval(spawnIntervalId);
+                playAudio(sounds.gameOver);
+                resetCombo();
+
+                if (hitBomb) {
+                    // Flash game container red for bomb explosion
+                    gameContainer.style.animation = 'flashRed 0.3s linear';
+                }
+
+                // Delay showing game over screen slightly for effects
+                setTimeout(() => {
+                    finalScoreDisplay.textContent = score;
+                    gameOverScreen.style.display = 'flex';
+                    gameContainer.style.animation = ''; // Clear flash after it's done
+                }, hitBomb ? 400 : 200);
+            }
+
+            function updateLivesDisplay() {
+                 livesEmojisDisplay.innerHTML = ''; // Clear existing hearts
+                for(let i=0; i < 3; i++) { // Always show 3 heart slots
+                    const heart = document.createElement('span');
+                    heart.className = 'life-heart';
+                    heart.textContent = i < lives ? '❤️' : '🖤'; // Red for active, black/empty for lost
+                    if (i >= lives) heart.style.animation = 'none'; // Stop pulsing lost hearts
+                    livesEmojisDisplay.appendChild(heart);
+                }
+                 if (lives === 0 && gameActive) { // Check gameActive to avoid triggering if already game over
+                     gameOver();
+                 }
+            }
+
+
+            function loseLife(missedFruit = false) {
+                if (!gameActive || lives <= 0) return;
+                lives--;
+                if (missedFruit) { playAudio(sounds.miss); resetCombo(); } // Reset combo if fruit is missed
+                updateLivesDisplay();
+                const livesBoardEl = document.getElementById('lives-board');
+                livesBoardEl.style.animation = 'shake 0.5s ease-in-out';
+                setTimeout(() => livesBoardEl.style.animation = '', 500);
+
+                if (lives <= 0) {
+                    gameOver();
+                }
+            }
+
+
+            function getEventPos(event) {
+                const rect = canvas.getBoundingClientRect();
+                let x, y;
+                if (event.touches && event.touches.length > 0) {
+                    x = event.touches[0].clientX - rect.left;
+                    y = event.touches[0].clientY - rect.top;
+                } else {
+                    x = event.clientX - rect.left;
+                    y = event.clientY - rect.top;
+                }
+                return { x, y };
+            }
+
+            let audioUnlocked = false;
+            function unlockInitialAudio() {
+                if (audioUnlocked) return;
+                silentAudio.play().then(() => {
+                    audioUnlocked = true;
+                    Object.values(sounds).forEach(sound => {
+                        if(sound.readyState < 2) sound.load();
+                    });
+                }).catch(error => {
+                    // console.warn("Silent audio play for unlock failed:", error);
+                    // User interaction on body will be the next chance
+                });
+            }
+            // One-time event listeners on body for the very first interaction
+            function firstUserInteractionListener() {
+                unlockInitialAudio();
+                document.body.removeEventListener('click', firstUserInteractionListener);
+                document.body.removeEventListener('touchstart', firstUserInteractionListener);
+            }
+            document.body.addEventListener('click', firstUserInteractionListener, { once: true });
+            document.body.addEventListener('touchstart', firstUserInteractionListener, { once: true });
+
+
+            function handleSliceStart(event) {
+                if (!gameActive) return;
+                 unlockInitialAudio(); // Try again on slice start if still locked
+
+                isSlicing = true;
+                fruitsSlicedThisSwipe = 0; // Reset count for this new swipe
+                slicedFruitIDsThisSwipe.clear(); // Clear set of IDs for this new swipe
+                sliceTrail = [getEventPos(event)];
+                event.preventDefault();
+            }
+
+            function handleSliceMove(event) {
+                if (!gameActive || !isSlicing) return;
+                const pos = getEventPos(event);
+                sliceTrail.push(pos);
+                if (sliceTrail.length > MAX_TRAIL_LENGTH) { sliceTrail.shift(); }
+
+                if (sliceTrail.length < 2) return;
+                const p1 = sliceTrail[sliceTrail.length - 2]; // Previous point
+                const p2 = sliceTrail[sliceTrail.length - 1]; // Current point
+
+                for (let i = objects.length - 1; i >= 0; i--) {
+                    const obj = objects[i];
+                    if (!obj.sliced) {
+                        // Simplified intersection: check if current point p2 is within object's radius
+                        // More robust: line segment to circle intersection
+                        const dist = Math.hypot(p2.x - obj.x, p2.y - obj.y);
+
+                        // Add a small buffer to radius for easier slicing, e.g., 30% of radius
+                        const effectiveRadius = obj.radius + (obj.radius * 0.3);
+
+                        if (dist < effectiveRadius) {
+                            const sliceAngle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+                            obj.slice(sliceAngle); // This calls incrementCombo if it's a fruit
+
+                            if (obj.isBomb && obj.sliced) {
+                                gameOver(true); // Pass true to indicate bomb caused game over
+                                return; // Stop processing, game is over
+                            } else if (obj.sliced && !obj.isBomb) { // Fruit was sliced
+                                score += pointsPerFruit;
+                                scoreDisplay.textContent = score;
+                                // incrementCombo is called inside obj.slice()
+                            }
+                        }
+                    }
+                }
+                event.preventDefault();
+            }
+
+            function handleSliceEnd() {
+                if (!gameActive) return;
+                isSlicing = false;
+                 // If combo was active, it will reset via its own timeout (resetComboOnTimeout)
+                 // or when a new slice starts (which resets fruitsSlicedThisSwipe)
+            }
+
+            canvas.addEventListener('mousedown', handleSliceStart);
+            canvas.addEventListener('mousemove', handleSliceMove);
+            // Listen on window for mouseup to catch if it happens outside canvas
+            window.addEventListener('mouseup', handleSliceEnd);
+            canvas.addEventListener('mouseleave', () => { if(isSlicing) handleSliceEnd(); });
+
+
+            canvas.addEventListener('touchstart', handleSliceStart, { passive: false });
+            canvas.addEventListener('touchmove', handleSliceMove, { passive: false });
+            canvas.addEventListener('touchend', handleSliceEnd);
+            canvas.addEventListener('touchcancel', handleSliceEnd);
+
+            function drawSliceTrail() {
+                if (sliceTrail.length < 2) return;
+                ctx.beginPath();
+                ctx.moveTo(sliceTrail[0].x, sliceTrail[0].y);
+                for (let i = 1; i < sliceTrail.length; i++) {
+                    const midPointX = (sliceTrail[i-1].x + sliceTrail[i].x) / 2;
+                    const midPointY = (sliceTrail[i-1].y + sliceTrail[i].y) / 2;
+                    ctx.quadraticCurveTo(sliceTrail[i-1].x, sliceTrail[i-1].y, midPointX, midPointY);
+                }
+                const trailIntensity = Math.min(1, sliceTrail.length / (MAX_TRAIL_LENGTH * 0.5));
+                ctx.strokeStyle = `rgba(255, 255, 220, ${0.5 + trailIntensity * 0.4})`;
+                ctx.lineWidth = Math.max(4, Math.min(canvas.width, canvas.height) * 0.02) * trailIntensity;
+                ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+                ctx.shadowColor = 'rgba(255, 255, 180, 0.5)'; ctx.shadowBlur = 7;
+                ctx.stroke();
+                ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+
+                if (!isSlicing && sliceTrail.length > 0) {
+                    sliceTrail.splice(0, Math.min(sliceTrail.length, 2)); // Fade out trail faster
+                }
+            }
+
+            function gameLoop() {
+                // Stop loop if game not active AND no overlay screens are meant to be showing (rare case)
+                // Or, more simply, if game is not active, just stop. Overlays are HTML and don't need canvas redraw.
+                if (!gameActive) {
+                     // If slice trail is still present, draw it one last time or let it fade
+                    if(sliceTrail.length > 0) {
+                        ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear for final trail draw
+                        drawSliceTrail();
+                        if (sliceTrail.length > 0) requestAnimationFrame(gameLoop); // Continue fading trail
+                    }
+                    return;
+                }
+
+
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    if (!particles[i].update()) { particles.splice(i, 1); }
+                    else { particles[i].draw(); }
+                }
+
+                for (let i = objects.length - 1; i >= 0; i--) {
+                    if (!objects[i].update()) { objects.splice(i, 1); }
+                    else { objects[i].draw(); }
+                }
+                drawSliceTrail();
+                requestAnimationFrame(gameLoop); // Continue loop if game is active
+            }
+
+            const styleSheet = document.createElement("style");
+            styleSheet.type = "text/css";
+            styleSheet.innerText = `
+                @keyframes flashRed {
+                    0%, 100% { background-color: transparent; } /* Use current bg or transparent */
+                    50% { background-color: rgba(255,0,0,0.4); }
+                }
+                @keyframes shake {
+                    0%, 100% { transform: translateX(0); }
+                    10%, 30%, 50%, 70%, 90% { transform: translateX(-6px) rotate(-2deg); }
+                    20%, 40%, 60%, 80% { transform: translateX(6px) rotate(2deg); }
+                }
+            `;
+            document.head.appendChild(styleSheet);
+
+            resizeCanvas(); // Initial sizing
+            updateLivesDisplay();
+            startScreen.style.display = 'flex';
+
+            startButton.addEventListener('click', startGame);
+            restartButton.addEventListener('click', startGame);
+        });
+    </script>
+
+</body>
+</html>
