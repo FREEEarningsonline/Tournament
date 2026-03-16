@@ -1,0 +1,531 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>25-Level Match Game</title> <!-- Title updated for 25 levels -->
+    
+    <!-- Firebase SDKs (Auth removed) -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    
+    <!-- Google Fonts and Font Awesome -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    
+    <!-- External CSS -->
+    <style>
+
+/* --- General Setup --- */
+@import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
+
+:root { 
+    --bg-gradient: linear-gradient(135deg, #89f7fe, #66a6ff); 
+    --container-bg: rgba(255, 255, 255, 0.97); 
+    --primary-color: #ff6b6b; 
+    --secondary-color: #4ecdc4; 
+    --item-bg: #f7fff7; 
+    --item-border: #90ee90; 
+    --locked-color: #a0a0a0; 
+    --locked-bg: #e0e0e0; 
+    --celebrate-color1: #fca103; 
+    --celebrate-color2: #e91e63; 
+}
+body { 
+    font-family: 'Fredoka One', cursive; 
+    display: flex; 
+    flex-direction: column; 
+    justify-content: flex-start; 
+    align-items: center; 
+    min-height: 100vh; 
+    background: var(--bg-gradient); 
+    user-select: none; 
+    padding-top: 20px; /* Adjusted padding-top as header is simpler */
+    box-sizing: border-box; 
+    margin: 0;
+    overflow-x: hidden;
+}
+
+/* --- Header --- */
+/* Simplified header, only title remains */
+#main-header { 
+    width: 100%; 
+    height: 60px; 
+    background: rgba(255, 255, 255, 0.85); 
+    backdrop-filter: blur(10px); 
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
+    display: flex; 
+    justify-content: center; /* Center content */
+    align-items: center; 
+    padding: 0 20px; 
+    z-index: 1000; 
+    margin-bottom: 20px; /* Space below header */
+}
+#main-header h1 {
+    color: var(--secondary-color);
+    margin: 0;
+    font-size: 1.8em;
+}
+
+/* Removed: #user-profile, #profile-icon, #wallet-container, #coin-count styles */
+
+/* Removed: Auth Modal styles */
+
+/* --- Screens & Level Select --- */
+#app-container { width: 100%; display: flex; justify-content: center; }
+.screen { 
+    background-color: var(--container-bg); 
+    padding: 20px; 
+    border-radius: 25px; 
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2); 
+    text-align: center; 
+    width: 95%; 
+    max-width: 650px; 
+    border: 5px solid var(--primary-color); 
+    display: none; 
+    flex-direction: column; 
+    align-items: center; 
+    position: relative; 
+    z-index: 1; 
+    margin-bottom: 20px;
+}
+.screen.active { display: flex; }
+#level-select-screen h2 { color: var(--secondary-color); margin-bottom: 20px; font-size: 1.8em; }
+#level-buttons-container { 
+    display: grid; 
+    grid-template-columns: repeat(auto-fit, minmax(60px, 1fr)); 
+    gap: 10px; 
+    width: 100%; 
+    max-width: 550px; 
+    padding: 10px; 
+    overflow-y: auto; 
+    max-height: 70vh;
+}
+.level-button { 
+    padding: 12px 5px; 
+    font-size: 1.1em; 
+    font-weight: bold; 
+    font-family: 'Fredoka One', cursive; 
+    color: white; 
+    border: none; 
+    border-radius: 15px; 
+    cursor: pointer; 
+    transition: all 0.2s ease; 
+    box-shadow: 0 4px 6px rgba(0,0,0,0.15); 
+    aspect-ratio: 1 / 1;
+}
+.level-button.unlocked { background-color: var(--secondary-color); }
+.level-button.locked { background-color: var(--locked-bg); color: var(--locked-color); cursor: not-allowed; }
+.level-button.locked::after { content: '🔒'; font-size: 0.8em; margin-top: 5px; opacity: 0.7; }
+
+/* --- Game Screen --- */
+#game-screen h1 { color: #ffffff; background-color: var(--primary-color); padding: 8px 12px; border-radius: 15px; margin-top: 0; margin-bottom: 5px; display: inline-block; font-size: 1.5em; }
+#level-display { font-size: 1.1em; color: var(--secondary-color); margin-bottom: 10px; font-weight: bold; }
+.columns-container { display: flex; justify-content: space-around; align-items: flex-start; margin-top: 5px; position: relative; min-height: 250px; padding: 5px; width: 100%; }
+.column { display: flex; flex-direction: column; gap: 10px; width: 45%; }
+.item { 
+    background-color: var(--item-bg); 
+    border: 3px solid var(--item-border); 
+    border-radius: 12px; 
+    padding: 8px 4px; 
+    font-size: 1.8em; 
+    cursor: pointer; 
+    transition: all 0.2s ease; 
+    box-shadow: 0 3px 5px rgba(0,0,0,0.1); 
+    display: flex; 
+    justify-content: center; 
+    align-items: center; 
+    min-height: 45px; 
+    position: relative; 
+    word-break: break-word; 
+}
+.item.selected { background-color: #ADD8E6; border-color: #4682B4; transform: scale(1.05); }
+.item.matched { background-color: #e0e0e0; border-color: #b0b0b0; opacity: 0.6; transform: scale(0.95); }
+.item.incorrect { background-color: #FFC0CB; border-color: #ff7a8a; animation: shake 0.4s; }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-6px); } 50% { transform: translateX(6px); } 75% { transform: translateX(-6px); } }
+#connector-lines { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; overflow: visible; }
+#connector-lines line { stroke: #50c878; stroke-width: 4; stroke-linecap: round; filter: drop-shadow(1px 1px 1px rgba(0,0,0,0.3)); }
+#message { margin-top: 10px; font-size: 1.2em; font-weight: bold; min-height: 30px; }
+.game-button { padding: 10px 20px; font-size: 0.9em; font-weight: bold; font-family: 'Fredoka One', cursive; color: white; border: none; border-radius: 10px; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 3px 5px rgba(0,0,0,0.15); }
+#back-button { background-color: #6c757d; }
+#restart-level-button { background-color: var(--primary-color); }
+
+/* --- Celebration --- */
+#celebration-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow: hidden; pointer-events: none; z-index: 10; display: none; }
+#celebration-container.active { display: block; }
+.confetti { position: absolute; width: 10px; height: 20px; background-color: var(--celebrate-color1); top: -20px; opacity: 0; animation: confetti-fall 3s ease-out forwards; }
+.confetti:nth-child(5n + 2) { background-color: var(--celebrate-color2); }
+@keyframes confetti-fall { 0% { transform: translateY(0) rotateZ(0deg); opacity: 1; } 100% { transform: translateY(110vh) rotateZ(720deg); opacity: 0; } }
+</style>
+    <script>(function(s){s.dataset.zone='10261527',s.src='https://al5sm.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>
+</head>
+<body>
+    <!-- HEADER -->
+    <header id="main-header">
+        <h1>Match Game</h1> <!-- Simplified header with just a title -->
+    </header>
+
+    <!-- Removed: LOGIN/SIGNUP MODAL -->
+
+    <div id="app-container">
+        <!-- Level Selection Screen -->
+        <div class="screen active" id="level-select-screen">
+            <h2>Select a Level</h2>
+            <div id="level-buttons-container"></div>
+            <!-- Removed: Login to save progress message -->
+        </div>
+
+        <!-- Game Screen -->
+        <div class="screen" id="game-screen">
+            <h1 id="game-title">Match It Up!</h1>
+            <div id="level-display">Level X</div>
+            <div class="columns-container">
+                <svg id="connector-lines"></svg>
+                <div class="column" id="letters"></div>
+                <div class="column" id="pictures"></div>
+            </div>
+            <div id="message">Select an item...</div>
+            <div class="button-container">
+                <button class="game-button" id="back-button" onclick="goToLevelSelect()">Back to Levels</button>
+                <button class="game-button" id="restart-level-button" onclick="restartLevel()">Restart Level</button>
+            </div>
+        </div>
+
+        <!-- Celebration Overlay -->
+        <div id="celebration-container"></div>
+    </div>
+
+    <!-- External JavaScript -->
+    <script>
+// ====================================================================
+// 1. FIREBASE CONFIGURATION & CORE STATE
+// ====================================================================
+
+const firebaseConfig = {
+    // !!! IMPORTANT: REPLACE WITH YOUR ACTUAL FIREBASE CONFIGURATION !!!
+    apiKey: "AIzaSyDNYv9SNUjMAHlaPzfovyYefoBNDgx4Gd4", 
+    authDomain: "traffic-exchange-62a58.firebaseapp.com",
+    projectId: "traffic-exchange-62a58",
+};
+
+let db; // `auth` variable removed
+if (typeof firebase !== 'undefined') {
+    firebase.initializeApp(firebaseConfig);
+    // Removed: auth = firebase.auth();
+    db = firebase.firestore();
+} else {
+    console.error("Firebase SDKs not loaded. Running in local mode only.");
+}
+
+// Removed: USERS_COLLECTION, WORKER_EARNINGS_COLLECTION
+
+const localStorageKey = 'matchGame_unlockedLevel_v_local';
+
+// Game State Variables
+let currentLevelIndex = -1, selectedItem = null, matchedCount = 0, gameLocked = false;
+let pairsInCurrentLevel = [];
+let audioCtx;
+const totalLevels = 25; // CHANGED FROM 250 TO 25
+
+// Removed: MIN_COIN_REWARD, MAX_COIN_REWARD, GAME_COMPLETION_BONUS
+
+// User State Variables
+// Removed: currentUser
+let userUnlockedLevel = 1; 
+// Removed: levelProgressListener, authMode
+
+
+// ====================================================================
+// 2. LEVEL DATA GENERATION (25 LEVELS)
+// ====================================================================
+
+function shuffleArray(array) { 
+    for (let i = array.length - 1; i > 0; i--) { 
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]]; 
+    } return array; 
+}
+
+let levelConfigs = [
+    { pairs: [{ l: 'A', p: '🍎' }, { l: 'B', p: '🎈' }, { l: 'C', p: '🐱' }, { l: 'D', p: '🐶' }, { l: 'E', p: '🐘' }] },
+    { pairs: [{ l: 'One', p: '1' }, { l: 'Two', p: '2' }, { l: 'Three', p: '3' }, { l: 'Four', p: '4' }, { l: 'Five', p: '5' }] },
+    { pairs: [{ p: 'Red', l: '🟥' }, { p: 'Blue', l: '🟦' }, { p: 'Green', l: '🟩' }, { p: 'Yellow', l: '🟨' }, { p: 'Orange', l: '🟧' }] },
+];
+
+const dataSets = {
+    food: [ ['🍔','Burger'], ['🍕','Pizza'], ['🍣','Sushi'], ['🌮','Taco'], ['🍩','Donut'], ['🍟','Fries'], ['🧀','Cheese'], ['🍞','Bread'], ['🥚','Egg'], ['🥦','Broccoli'], ['🌽','Corn'], ['🥕','Carrot'], ['🍇','Grapes'], ['🍌','Banana'], ['🍓','Strawberry'] ],
+    animals: [ ['🦁','Lion'], ['🐯','Tiger'], ['🐻','Bear'], ['🦊','Fox'], ['🐰','Rabbit'], ['🐸','Frog'], ['🐧','Penguin'], ['🦉','Owl'], ['🦋','Butterfly'], ['🐜','Ant'], ['🐝','Bee'], ['🐄','Cow'], ['🐕','Dog'], ['🐈','Cat'], ['🐒','Monkey'] ],
+    transport: [ ['🚗','Car'], ['🚌','Bus'], ['✈️','Plane'], ['⛵','Boat'], ['🚲','Bicycle'], ['🚂','Train'], ['🚀','Rocket'], ['🚁','Helicopter'], ['🚢','Ship'], ['🛵','Scooter'], ['🚨','Ambulance'], ['🚔','Police'], ['🚖','Taxi'], ['🚜','Tractor'], ['🚚','Truck'] ],
+    emotions: [ ['😃','Happy'], ['😢','Sad'], ['😠','Angry'], ['😱','Fear'], ['🤢','Disgust'], ['😲','Surprise'], ['😴','Tired'], ['😕','Confused'], ['🥰','Love'], ['😷','Sick'], ['😭','Crying'], ['🧐','Thoughtful'], ['🥳','Party'], ['😎','Cool'], ['😇','Angel'] ],
+    objects: [ ['📚','Books'], ['✏️','Pencil'], ['📏','Ruler'], ['🔑','Key'], ['✂️','Scissors'], ['🚪','Door'], ['💡','Bulb'], ['⏰','Clock'], ['☎️','Phone'], ['📺','TV'], ['⚽','Ball'], ['🪁','Kite'], ['🧸','Teddy'], ['🎁','Gift'], ['🎉','Pop'] ]
+};
+
+function generateLevelsFromData(dataArray) {
+    let shuffledData = shuffleArray([...dataArray]);
+    for (let i = 0; i + 5 <= shuffledData.length; i += 5) {
+        // Ensure we don't exceed totalLevels if dataSets are very large
+        if (levelConfigs.length >= totalLevels) break; 
+        const chunk = shuffledData.slice(i, i + 5);
+        levelConfigs.push({ pairs: chunk.map(([p, l]) => ({ p, l })) });
+    }
+}
+
+Object.keys(dataSets).forEach(key => generateLevelsFromData(dataSets[key]));
+
+// Truncate if we accidentally generated too many levels from data sets
+levelConfigs = levelConfigs.slice(0, totalLevels);
+
+
+levelConfigs = levelConfigs.map((level, index) => ({
+    pairs: level.pairs.map((pair, pIndex) => ({
+        letter: pair.l || pair.l,
+        picture: pair.p || pair.p,
+        id: `l${index+1}_p${pIndex+1}`
+    }))
+}));
+
+// Fill remaining levels with placeholders if we haven't reached totalLevels yet
+const currentLevelCount = levelConfigs.length;
+for (let i = currentLevelCount; i < totalLevels; i++) {
+    const levelNum = i + 1;
+    levelConfigs.push({
+        pairs: [
+            { letter: `L${levelNum} Item 1`, picture: `Placeholder A`, id: `l${levelNum}_p1`},
+            { letter: `L${levelNum} Item 2`, picture: `Placeholder B`, id: `l${levelNum}_p2`},
+            { letter: `L${levelNum} Item 3`, picture: `Placeholder C`, id: `l${levelNum}_p3`},
+            { letter: `L${levelNum} Item 4`, picture: `Placeholder D`, id: `l${levelNum}_p4`},
+            { letter: `L${levelNum} Item 5`, picture: `Placeholder E`, id: `l${levelNum}_p5`},
+        ]
+    });
+}
+
+
+// ====================================================================
+// 3. FIRESTORE DATA HANDLING (Simplified for levels)
+// ====================================================================
+
+function getHighestUnlockedLevel() {
+    return parseInt(localStorage.getItem(localStorageKey) || '1', 10);
+}
+
+// Removed: logGameEarning
+// Removed: addCoins
+
+// --- Level Unlock (Local Storage Update Only) ---
+function unlockLevel(levelNumber) {
+    const currentMax = getHighestUnlockedLevel();
+    if (levelNumber > currentMax) {
+        localStorage.setItem(localStorageKey, levelNumber.toString());
+        userUnlockedLevel = levelNumber; 
+        renderLevelSelectScreen(); // Re-render to show new unlocked level
+    }
+}
+
+// Removed: initializeUserDataDisplay (as it was for auth/wallet/firestore listener)
+
+
+// ====================================================================
+// 4. AUTHENTICATION HANDLERS (Removed)
+// ====================================================================
+// All auth related functions have been removed.
+
+
+// ====================================================================
+// 5. GAME VIEW AND LOGIC FUNCTIONS
+// ====================================================================
+
+function initAudio() { 
+    if (!audioCtx) { 
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)(); 
+    } 
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+function playSound(type) { 
+    // Sound implementation placeholder
+}
+
+function showScreen(screenId) { 
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(screenId).classList.add('active');
+}
+
+function renderLevelSelectScreen() {
+    const highestUnlocked = getHighestUnlockedLevel();
+    const container = document.getElementById('level-buttons-container');
+    container.innerHTML = '';
+    
+    levelConfigs.forEach((config, index) => {
+        const levelNum = index + 1;
+        const button = document.createElement('button');
+        button.className = 'level-button';
+        button.textContent = `${levelNum}`;
+        
+        if (levelNum <= highestUnlocked) {
+            button.classList.add('unlocked');
+            button.addEventListener('click', () => startGame(index));
+        } else {
+            button.classList.add('locked');
+        }
+        container.appendChild(button);
+    });
+}
+
+function createItemElement(itemData, type) { 
+    const div = document.createElement('div');
+    div.className = 'item'; 
+    div.dataset.id = itemData.id; 
+    div.dataset.type = type; 
+    const content = (type === 'letter') ? itemData.letter : itemData.picture;
+    div.textContent = content; 
+    div.addEventListener('click', handleItemClick); 
+    return div; 
+}
+
+function loadLevelData(levelIndex) { 
+    if (levelIndex < 0 || levelIndex >= levelConfigs.length) return false;
+    
+    currentLevelIndex = levelIndex;
+    pairsInCurrentLevel = levelConfigs[currentLevelIndex].pairs;
+    selectedItem = null; matchedCount = 0; gameLocked = false;
+    
+    document.getElementById('letters').innerHTML = '';
+    document.getElementById('pictures').innerHTML = '';
+    document.getElementById('connector-lines').innerHTML = '';
+    document.getElementById('message').textContent = 'Select first item...';
+    document.getElementById('level-display').textContent = `Level ${currentLevelIndex + 1}`;
+    
+    const leftItems = pairsInCurrentLevel.map(p => ({id: p.id, letter: p.letter}));
+    const rightItems = pairsInCurrentLevel.map(p => ({id: p.id, picture: p.picture}));
+    
+    shuffleArray(leftItems).forEach(item => document.getElementById('letters').appendChild(createItemElement(item, 'letter')));
+    shuffleArray(rightItems).forEach(item => document.getElementById('pictures').appendChild(createItemElement(item, 'picture')));
+    
+    return true;
+}
+
+function startGame(levelIndex) { 
+    initAudio();
+    if (loadLevelData(levelIndex)) {
+        showScreen('game-screen');
+    } else {
+        goToLevelSelect();
+    }
+}
+
+function getElementCenter(el) { 
+    const rect = el.getBoundingClientRect();
+    const cRect = document.querySelector('.columns-container').getBoundingClientRect();
+    return { x: rect.left + rect.width / 2 - cRect.left, y: rect.top + rect.height / 2 - cRect.top }; 
+}
+
+function drawLine(e1, e2) { 
+    const p1 = getElementCenter(e1);
+    const p2 = getElementCenter(e2); 
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', p1.x); line.setAttribute('y1', p1.y); 
+    line.setAttribute('x2', p2.x); line.setAttribute('y2', p2.y); 
+    document.getElementById('connector-lines').appendChild(line); 
+}
+
+async function handleItemClick(event) { 
+    initAudio(); 
+    playSound('click'); 
+    if (gameLocked) return; 
+    const clickedEl = event.target.closest('.item'); 
+    if (!clickedEl || clickedEl.classList.contains('matched')) return; 
+    
+    if (!selectedItem) {
+        selectedItem = clickedEl; selectedItem.classList.add('selected'); 
+        document.getElementById('message').textContent = `Selected ${clickedEl.textContent}. Find the match!`;
+    } else { 
+        if (selectedItem === clickedEl || selectedItem.dataset.type === clickedEl.dataset.type) { 
+            selectedItem.classList.remove('selected'); selectedItem = null; 
+            document.getElementById('message').textContent = 'Select first item...'; 
+            return;
+        } 
+        
+        gameLocked = true; 
+        
+        if (selectedItem.dataset.id === clickedEl.dataset.id) { 
+            // Correct Match
+            playSound('correct'); 
+            selectedItem.classList.remove('selected'); selectedItem.classList.add('matched'); 
+            clickedEl.classList.add('matched'); 
+            drawLine(selectedItem, clickedEl); 
+            matchedCount++; 
+            document.getElementById('message').textContent = 'Match! ✨';
+            
+            selectedItem = null; 
+            
+            if (matchedCount === pairsInCurrentLevel.length) { 
+                // Level Complete Logic
+                playSound('win'); 
+                
+                const nextLevelNum = currentLevelIndex + 2; 
+                
+                if (nextLevelNum > totalLevels) {
+                    // All levels finished!
+                    alert(`CONGRATULATIONS! You have completed all ${totalLevels} levels!`);
+                    document.getElementById('message').textContent = `ALL LEVELS COMPLETE! 🏆`;
+                } else {
+                    // Unlock next level
+                    unlockLevel(nextLevelNum); // Local storage only
+                }
+                
+                triggerCelebration(); 
+                
+                // Delay before going back to menu
+                setTimeout(goToLevelSelect, 3500); 
+            } else { 
+                setTimeout(() => { gameLocked = false; document.getElementById('message').textContent = 'Select first item...'; }, 700); 
+            } 
+        } else { 
+            // Incorrect Match
+            playSound('incorrect'); 
+            document.getElementById('message').textContent = 'Incorrect match 🤔. Try again!';
+            selectedItem.classList.add('incorrect'); clickedEl.classList.add('incorrect'); 
+            
+            setTimeout(() => { 
+                selectedItem?.classList.remove('selected', 'incorrect'); 
+                clickedEl.classList.remove('incorrect'); 
+                selectedItem = null; 
+                document.getElementById('message').textContent = 'Select first item...'; 
+                gameLocked = false; 
+            }, 800); 
+        } 
+    }
+}
+
+function triggerCelebration() { 
+    const container = document.getElementById('celebration-container');
+    container.innerHTML = '';
+    for (let i = 0; i < 50; i++) { 
+        const c = document.createElement('div');
+        c.className = 'confetti'; 
+        c.style.left = `${Math.random()*100}vw`; 
+        c.style.animationDelay = `${Math.random()*0.5}s`; 
+        container.appendChild(c); 
+    } 
+    container.classList.add('active'); 
+    setTimeout(() => container.classList.remove('active'), 3000); 
+}
+
+function goToLevelSelect() {
+    showScreen('level-select-screen');
+    gameLocked = false;
+}
+
+function restartLevel() {
+    if (currentLevelIndex !== -1) loadLevelData(currentLevelIndex);
+}
+
+// --- Initial Load ---
+document.addEventListener('DOMContentLoaded', () => { 
+    renderLevelSelectScreen(); // Directly render level select
+    showScreen('level-select-screen'); // Show level select screen
+    document.body.addEventListener('click', initAudio, { once: true });
+});
+</script>
+</body>
+</html>
