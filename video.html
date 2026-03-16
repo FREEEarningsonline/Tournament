@@ -1,0 +1,336 @@
+
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title> Video Player App</title>
+    
+    <!-- Firebase SDKs (Version 8.10.0) - RE-ADDED -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+    
+    <!-- Font Awesome (kept for potential future use or other icons if needed, but lock icon related code removed) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- External Style Sheet Link (existing script, kept as is) -->
+<script>(function(s){s.dataset.zone='10261527',s.src='https://al5sm.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>
+    <style>
+/* -------------------------------------- */
+    /* 0. NEW BISMILLAH HEADER & KEYFRAMES    */
+    /* -------------------------------------- */
+    .bismillah-header {
+      text-align: center;
+      padding: 10px;
+      font-size: 1.5em; 
+      font-weight: 700;
+      color: #1e88e5; 
+      background-color: #ffffff;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+      font-family: 'Times New Roman', serif; 
+      position: sticky;
+      top: 0;
+      z-index: 200; 
+    }
+/* --- 1. MODERN CSS STYLING --- */
+        :root {
+            --primary-color: #007bff;
+            --secondary-color: #28a745;
+            --dark-bg: #2c3e50;
+            --light-bg: #ffffff;
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f2f5;
+            color: #333;
+        }
+
+        header {
+            background-color: var(--dark-bg);
+            color: white;
+            padding: 20px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: var(--shadow);
+        }
+
+        header h1 { margin: 0; font-size: 1.8em; }
+
+        .container {
+            width: 90%;
+            max-width: 1200px;
+            margin: 30px auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+        }
+
+        .section {
+            background-color: var(--light-bg);
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: var(--shadow);
+            transition: transform 0.3s ease;
+            overflow: hidden;
+        }
+        
+        .section:hover {
+            transform: translateY(-5px);
+        }
+
+        .section h2 {
+            color: var(--primary-color);
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+
+        /* --- Video Wrapper and Overlay --- */
+        .video-wrapper {
+            position: relative;
+            width: 100%;
+            padding-bottom: 56.25%; /* 16:9 Aspect Ratio */
+            height: 0;
+            overflow: hidden;
+            margin-top: 15px;
+            border-radius: 6px;
+        }
+
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .video-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6); /* Default background */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            z-index: 10;
+            transition: opacity 0.3s;
+            color: white; /* Text color for overlay */
+            text-align: center;
+        }
+        
+        .video-overlay-text {
+            color: white;
+            font-size: 1.5em;
+            font-weight: bold;
+            padding: 10px 20px;
+            border: 2px solid white;
+            border-radius: 5px;
+        }
+    </style>
+</head> 
+<body> 
+    <!-- NEW BISMILLAH HEADER -->
+    <div class="bismillah-header">
+       
+    </div>
+    <header>
+        <h1>Youtube Watch Time Complete</h1>
+    </header>
+
+    <div class="container" id="mainContainer">
+        <!-- Video Sections will be generated here by script.js -->
+    </div>
+
+    <!-- External Script Link -->
+    <script>
+
+// ====================================================================
+// 1. FIREBASE CONFIGURATION & SETUP - RE-ADDED
+// ====================================================================
+
+const firebaseConfig = {
+    apiKey: "AIzaSyDNYv9SNUjMAHlaPzfovyYefoBNDgx4Gd4",
+    authDomain: "traffic-exchange-62a58.firebaseapp.com",
+    projectId: "traffic-exchange-62a58",
+    storageBucket: "traffic-exchange-62a58.appspot.com",
+    messagingSenderId: "474999317287",
+    appId: "1:474999317287:web:8e28a2f5f1a959d8ce3f02",
+    measurementId: "G-HJQ46RQNZS"
+};
+
+// Initialize Firebase
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
+
+// Firestore and Auth instances (Auth is not used, but kept for consistency with original setup)
+const auth = firebase.auth(); 
+const db = firebase.firestore();
+
+// --- GLOBAL STATE AND CONSTANTS ---
+// Removed: isSignupMode, currentUser, rewardedVideos, lastWatchedTimes
+const VIDEO_COLLECTION = 'video_sections'; // RE-ADDED
+
+// --- DEFAULT VIDEO LINKS (FALLBACK DATA - kept structure consistent with Firestore potential) ---
+const DEFAULT_VIDEOS = [
+    { id: 1, link: "https://www.youtube.com/watch?v=fjHXG7brtso", reward: 10, time: 250 }, 
+    { id: 2, link: "https://www.youtube.com/watch?v=fjHXG7brtso", reward: 10, time: 250 }, 
+    { id: 3, link: "https://www.youtube.com/watch?v=fjHXG7brtso", reward: 10, time: 250 }, 
+    { id: 4, link: "https://www.youtube.com/watch?v=fjHXG7brtso", reward: 10, time: 250 }, 
+    { id: 5, link: "https://www.youtube.com/watch?v=fjHXG7brtso", reward: 10, time: 250 }, 
+    { id: 6, link: "https://www.youtube.com/watch/v=fjHXG7brtso", reward: 10, time: 250 }, 
+    { id: 7, link: "https://www.youtube.com/watch/v=fjHXG7brtso", reward: 10, time: 250 }, 
+    { id: 8, link: "https://www.youtube.com/watch/v=fjHXG7brtso", reward: 10, time: 250 }, 
+    { id: 9, link: "https://www.youtube.com/watch/v=fjHXG7brtso", reward: 10, time: 250 }, 
+    { id: 10, link: "https://www.youtube.com/watch/v=fjHXG7brtso", reward: 10, time: 250 }
+];
+
+// --- NEW: Video Data State ---
+let availableVideos = []; 
+
+// --- DOM ELEMENTS (Simplified) ---
+const container = document.getElementById('mainContainer');
+
+// ====================================================================
+// 2. AUTHENTICATION AND INITIALIZATION (Removed)
+// ====================================================================
+// All authentication related functions and listeners remain removed.
+
+
+// ====================================================================
+// 3. WALLET AND FIRESTORE FUNCTIONS (Removed)
+// ====================================================================
+// All wallet and earning related functions remain removed.
+
+
+// ====================================================================
+// 4. VIDEO LOGIC (Simplified)
+// ====================================================================
+
+function getYouTubeId(url) {
+    let match = url.match(/[?&]v=([^&]+)/);
+    if (match) return match[1];
+    match = url.match(/youtu\.be\/([^?]+)/);
+    if (match) return match[1];
+    return 'fjHXG7brtso'; // Fallback ID if none found
+}
+
+// --- Simplified: updateVideoOverlays (No login/lockout states) ---
+function updateVideoOverlays() {
+    document.querySelectorAll('.video-overlay').forEach(overlay => {
+        overlay.querySelector('.video-overlay-text').textContent = 'Video Play Karen';
+    });
+}
+
+// Function to handle the click on the overlay (Simplified)
+function handleVideoClick(event, videoData) {
+    const overlay = event.currentTarget;
+    
+    // Simply hide the overlay
+    overlay.style.opacity = '0';
+    setTimeout(() => {
+        overlay.style.display = 'none';
+    }, 300);
+
+    // Video ko autoplay karna
+    const videoLink = videoData.link;
+    const videoId = getYouTubeId(videoLink);
+    const iframe = overlay.nextElementSibling;
+    iframe.src = `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=0&controls=1`;
+}
+
+
+// --- DYNAMIC SECTION GENERATION ---
+function generateSections(videosToDisplay) {
+    container.innerHTML = '';
+    
+    if (videosToDisplay.length === 0) {
+        container.innerHTML = '<p style="text-align:center; padding:50px; color:#555;">No videos available from database. Displaying default videos.</p>';
+        videosToDisplay = DEFAULT_VIDEOS; // Fallback to default if DB returns empty
+    }
+
+    videosToDisplay.forEach(video => {
+        const i = video.id;
+        const currentLink = video.link;
+        const videoId = getYouTubeId(currentLink);
+        const embedUrl = `https://www.youtube.com/embed/${videoId}?controls=1`;
+
+        const section = document.createElement('div');
+        section.classList.add('section');
+        section.id = `section${i}`;
+        
+        section.innerHTML = `
+            <h2>Video ${i}</h2>
+            <div class="video-wrapper">
+                
+                <!-- Overlay for click detection -->
+                <div class="video-overlay" id="overlay-${i}">
+                    <span class="video-overlay-text">Video Play Karen</span>
+                </div>
+
+                <!-- Iframe -->
+                <iframe 
+                    src="${embedUrl}" 
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                    allowfullscreen>
+                </iframe>
+            </div>
+        `;
+        
+        container.appendChild(section);
+
+        const overlayElement = document.getElementById(`overlay-${i}`);
+        overlayElement.addEventListener('click', (e) => handleVideoClick(e, video));
+    });
+    updateVideoOverlays();
+}
+
+// --- Firestore Listener for Videos ---
+function listenToVideoSections() {
+    db.collection(VIDEO_COLLECTION).orderBy('id').onSnapshot(snapshot => {
+        availableVideos = [];
+        snapshot.forEach(doc => {
+            const data = doc.data();
+            // Ensure ID is a number for consistent sorting and use
+            data.id = Number(data.id); 
+            availableVideos.push(data);
+        });
+        
+        if (availableVideos.length === 0) {
+            console.log("Firestore video list is empty. Using default hardcoded videos.");
+            generateSections(DEFAULT_VIDEOS); // Explicitly pass DEFAULT_VIDEOS
+        } else {
+            generateSections(availableVideos);
+        }
+
+    }, error => {
+        console.error("Error fetching video sections from Firestore:", error);
+        container.innerHTML = '<p style="text-align:center; padding:50px; color:orange;">Warning: Could not fetch videos from Admin. Using default videos.</p>';
+        generateSections(DEFAULT_VIDEOS); // Fallback on error
+    });
+}
+
+
+// ====================================================================
+// 5. EVENT LISTENERS AND INITIAL LOAD
+// ====================================================================
+
+// Start the app by listening to video sections from Firestore
+listenToVideoSections();
+
+</script>
+    
+ 
+</body>
+</html>
