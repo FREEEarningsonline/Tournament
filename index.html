@@ -1,0 +1,139 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tournament App</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+    <style>
+        body { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
+        .page { display: none; } .page.active { display: block; } .modal { display: none; } .modal.active { display: flex; }
+        ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: #fff7ed; } ::-webkit-scrollbar-thumb { background: #dc2626; border-radius: 5px;}
+        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+        .text-gradient { background-clip: text; -webkit-background-clip: text; color: transparent; background-image: linear-gradient(to right, #dc2626, #fbbf24); }
+        
+        /* Nav Animation */
+        .nav-item { transition: all 0.3s ease; }
+    </style>
+</head>
+<body class="bg-orange-50 text-gray-800 font-sans">
+
+    <div id="app-container" class="max-w-md mx-auto min-h-screen bg-white shadow-2xl border-x border-orange-100 relative">
+
+        <header id="app-header" class="p-4 bg-white/90 backdrop-blur-sm flex justify-between items-center sticky top-0 z-50 border-b border-orange-200" style="display: none;">
+            <h1 class="text-xl font-bold text-gradient">Tournament</h1>
+            <!-- Changed default display to PKR -->
+            <div id="wallet-balance-header" class="px-3 py-1 bg-red-50 rounded-full text-sm font-semibold border border-red-200"><i class="fas fa-wallet text-red-500"></i> PKR...</div>
+        </header>
+
+        <main id="main-content" class="pb-24">
+            <!-- loginPage is now primarily handled by authModal, this div can remain empty -->
+            <div id="loginPage" class="page"></div> 
+            <div id="homePage" class="page"></div>
+            <div id="myTournamentsPage" class="page"></div>
+            <div id="walletPage" class="page"></div>
+            <div id="profilePage" class="page"></div>
+        </main>
+
+        <!-- BOTTOM NAV: Gradient with White Icons -->
+        <nav id="user-bottom-nav" class="fixed bottom-0 left-0 right-0 bg-gradient-to-r from-red-600 to-yellow-500 shadow-[0_-5px_15px_rgba(220,38,38,0.3)] rounded-t-2xl max-w-md mx-auto z-50" style="display: none;">
+            <div class="flex justify-around p-4 items-end">
+                <a href="#" class="nav-item text-center text-white/70" onclick="navigateTo('homePage')"><i class="fas fa-gamepad fa-lg mb-1"></i><span class="block text-[10px] font-medium">Games</span></a>
+                <a href="#" class="nav-item text-center text-white/70" onclick="navigateTo('myTournamentsPage')"><i class="fas fa-trophy fa-lg mb-1"></i><span class="block text-[10px] font-medium">Matches</span></a>
+                <a href="#" class="nav-item text-center text-white/70" onclick="navigateTo('walletPage')"><i class="fas fa-wallet fa-lg mb-1"></i><span class="block text-[10px] font-medium">Wallet</span></a>
+                <a href="#" class="nav-item text-center text-white/70" onclick="navigateTo('profilePage')"><i class="fas fa-user-cog fa-lg mb-1"></i><span class="block text-[10px] font-medium">Profile</span></a>
+
+
+              <a href="https://toolswebsite205.blogspot.com/p/privacy-policy_12.html" class="nav-item text-center text-white/70" onclick="navigateTo('profilePage')"><i class="fas fa-user-cog fa-lg mb-1"></i><span class="block text-[10px] font-medium"> Privacy Policy  </span></a>
+
+   </div> 
+        </nav>
+    </div>
+
+    <!-- Modals -->
+    <!-- AUTH MODAL: New modal for Login/Signup -->
+    <div id="authModal" class="modal fixed inset-0 bg-black bg-opacity-70 items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-lg w-11/12 max-w-sm border border-orange-200 shadow-lg relative">
+            <button onclick="toggleModal('authModal', false)" class="absolute top-3 right-3 text-gray-500 hover:text-gray-700">
+                <i class="fas fa-times fa-lg"></i>
+            </button>
+            <h3 class="text-xl font-bold mb-4 text-center text-gradient">Welcome!</h3>
+            <p class="text-center text-gray-600 mb-6">Login or create an account to play and join tournaments.</p>
+
+            <div class="flex border-b border-gray-200 mb-4">
+                <button id="loginTabBtnModal" class="flex-1 py-2 text-center font-bold border-b-4 border-red-500 text-red-600">Login</button>
+                <button id="signupTabBtnModal" class="flex-1 py-2 text-center font-bold text-gray-400 border-b-4 border-transparent">Sign Up</button>
+            </div>
+            <form id="loginFormModal" class="space-y-4">
+                <input type="email" id="loginEmailModal" placeholder="Email" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                <input type="password" id="loginPasswordModal" placeholder="Password" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                <button type="submit" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-700 hover:to-yellow-600 p-3 rounded-lg font-bold shadow-md transition-all">Login</button>
+            </form>
+            <form id="signupFormModal" class="space-y-4" style="display:none;">
+                <input type="text" id="signupUsernameModal" placeholder="Username" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                <input type="email" id="signupEmailModal" placeholder="Email" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                <input type="password" id="signupPasswordModal" placeholder="Password (min. 6 chars)" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                <button type="submit" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-700 hover:to-yellow-600 p-3 rounded-lg font-bold shadow-md transition-all">Create Account</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="addMoneyModal" class="modal fixed inset-0 bg-black bg-opacity-70 items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-lg w-11/12 max-w-sm border border-orange-200 shadow-lg">
+            <h3 class="text-xl font-bold mb-4 text-green-600">Deposit via EasyPaisa / JazzCash</h3>
+            <p class="text-sm text-gray-600 mb-4">
+                Please send the desired amount to the following number via EasyPaisa or JazzCash:<br>
+                <strong class="text-red-600 text-lg">03105784772</strong><br>
+                After payment, enter the amount, Transaction ID (TID), and payment method below.
+            </p>
+            <form id="addMoneyForm" class="space-y-4">
+                <input type="number" id="add-amount" placeholder="Enter amount (PKR)" class="w-full p-3 bg-orange-50 rounded border border-orange-200 focus:outline-none focus:border-red-500" required>
+                <input type="text" id="deposit-tid" placeholder="Enter Transaction ID (TID)" class="w-full p-3 bg-orange-50 rounded border border-orange-200 focus:outline-none focus:border-red-500" required>
+                <input type="text" id="deposit-source-type" placeholder="EasyPaisa / JazzCash (e.g., EasyPaisa)" class="w-full p-3 bg-orange-50 rounded border border-orange-200 focus:outline-none focus:border-red-500" required>
+
+                <button type="submit" class="w-full text-white bg-gradient-to-r from-green-500 to-green-600 p-3 rounded font-semibold shadow-md">Confirm Deposit</button>
+                <button type="button" onclick="toggleModal('addMoneyModal', false)" class="w-full bg-gray-200 text-gray-700 p-3 rounded font-semibold">Cancel</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="withdrawMoneyModal" class="modal fixed inset-0 bg-black bg-opacity-70 items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-lg w-11/12 max-w-sm border border-orange-200 shadow-lg">
+
+            <h3 class="text-xl font-bold mb-4 text-red-600">Withdraw via EasyPaisa / JazzCash</h3>
+
+            <form id="withdrawMoneyForm" class="space-y-4">
+                <input type="number" id="withdraw-amount" placeholder="Enter amount min 120 (PKR)" class="w-full p-3 bg-orange-50 rounded border border-orange-200" required>
+                <input type="text" id="withdraw-number" placeholder="EasyPaisa / JazzCash Number" class="w-full p-3 bg-orange-50 rounded border border-orange-200" required>
+                <input type="text" id="withdraw-owner-name" placeholder="Owner Name" class="w-full p-3 bg-orange-50 rounded border border-orange-200" required>
+                <input type="text" id="withdraw-account-type" placeholder="EasyPaisa / JazzCash (e.g., EasyPaisa)" class="w-full p-3 bg-orange-50 rounded border border-orange-200" required>
+
+                <button type="submit" class="w-full text-white bg-gradient-to-r from-blue-500 to-blue-600 p-3 rounded font-semibold shadow-md">Request Withdrawal</button>
+                <button type="button" onclick="toggleModal('withdrawMoneyModal', false)" class="w-full bg-gray-200 text-gray-700 p-3 rounded font-semibold">Cancel</button>
+            </form>
+
+<p>
+Withdrawal Rules<br><br>
+
+1️⃣ Withdrawal sirf un users ke liye available hai jo Live Tournament Match play karte hain.<br><br>
+</p>
+        </div>
+
+    </div>
+    
+    <div id="toast" class="fixed top-5 right-5 text-white py-2 px-4 rounded-lg shadow-lg" style="display: none; z-index: 1000;"></div>
+
+    <!-- Link to the separate script.js file -->
+    <script src="script.js"></script>
+</body>
+</html>
