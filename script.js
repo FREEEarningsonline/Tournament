@@ -563,7 +563,7 @@ function renderProfilePage(container) {
 function generateReferralLink(uid) {
     // This link is for tracking referrals *within this web application*.
     // The Google Play Store 'referrer' parameter works differently and is typically for native Android apps.
-    return `https://nazim000679g.github.io/Tournament/?ref=${encodeURIComponent(uid)}`;
+    return `https://freeearningsonline.github.io/Tournament/?ref=${encodeURIComponent(uid)}`;
 }
 
 // Function to copy referral link to clipboard
