@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -10,12 +9,12 @@
     <!-- Font Awesome CDN -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.1.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.1.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.1.0/firebase-database.js"></script>
 
     <style>
-        body { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
+        body { -webkit-tap-highlight-color: transparent; overflow-x: hidden; } 
         .page { display: none; } .page.active { display: block; } .modal { display: none; } .modal.active { display: flex; }
         ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: #fff7ed; } ::-webkit-scrollbar-thumb { background: #dc2626; border-radius: 5px;}
         input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
@@ -24,6 +23,45 @@
         
         /* Nav Animation */
         .nav-item { transition: all 0.3s ease; }
+        
+        /* Custom styles for details/summary (accordion) */
+        details.policy-accordion {
+            background-color: #fff7ed; /* bg-orange-50 */
+            border: 1px solid #fed7aa; /* border-orange-100 */
+            border-radius: 0.5rem; /* rounded-md */
+            margin-bottom: 1rem; /* mb-4 */
+            padding: 0.75rem; /* p-3 */
+        }
+        details.policy-accordion summary {
+            font-weight: 600; /* font-semibold */
+            color: #4b5563; /* text-gray-700 */
+            cursor: pointer;
+            padding: 0.25rem 0; /* Vertical padding for the summary text */
+            list-style: none; /* Remove default marker */
+            position: relative;
+        }
+        details.policy-accordion summary::-webkit-details-marker {
+            display: none; /* Hide default marker for webkit browsers */
+        }
+        details.policy-accordion summary::before {
+            content: "\f055"; /* Plus icon */
+            font-family: "Font Awesome 6 Free";
+            font-weight: 900;
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            transition: transform 0.3s ease;
+        }
+        details.policy-accordion[open] summary::before {
+            content: "\f056"; /* Minus icon */
+            transform: translateY(-50%); 
+        }
+        details.policy-accordion ul {
+            margin-top: 0.5rem; /* mt-2 */
+            padding-left: 1.25rem; /* Indent the list */
+            color: #4b5563; /* text-gray-700 */
+        }
     </style>
 </head>
 <body class="bg-orange-50 text-gray-800 font-sans">
@@ -32,12 +70,10 @@
 
         <header id="app-header" class="p-4 bg-white/90 backdrop-blur-sm flex justify-between items-center sticky top-0 z-50 border-b border-orange-200" style="display: none;">
             <h1 class="text-xl font-bold text-gradient">Tournament</h1>
-            <!-- Changed default display to PKR -->
-            <div id="wallet-balance-header" class="px-3 py-1 bg-red-50 rounded-full text-sm font-semibold border border-red-200"><i class="fas fa-wallet text-red-500"></i> PKR...</div>
+            <div id="wallet-balance-header" class="px-3 py-1 bg-red-50 rounded-full text-sm font-semibold border border-red-200"><i class="fas fa-wallet text-red-500"></i> <span id="header-wallet-balance">PKR...</span></div>
         </header>
 
         <main id="main-content" class="pb-24">
-            <!-- loginPage is now primarily handled by authModal, this div can remain empty -->
             <div id="loginPage" class="page"></div> 
             <div id="homePage" class="page"></div>
             <div id="myTournamentsPage" class="page"></div>
@@ -45,23 +81,17 @@
             <div id="profilePage" class="page"></div>
         </main>
 
-        <!-- BOTTOM NAV: Gradient with White Icons -->
         <nav id="user-bottom-nav" class="fixed bottom-0 left-0 right-0 bg-gradient-to-r from-red-600 to-yellow-500 shadow-[0_-5px_15px_rgba(220,38,38,0.3)] rounded-t-2xl max-w-md mx-auto z-50" style="display: none;">
             <div class="flex justify-around p-4 items-end">
-                <a href="#" class="nav-item text-center text-white/70" onclick="navigateTo('homePage')"><i class="fas fa-gamepad fa-lg mb-1"></i><span class="block text-[10px] font-medium">Games</span></a>
-                <a href="#" class="nav-item text-center text-white/70" onclick="navigateTo('myTournamentsPage')"><i class="fas fa-trophy fa-lg mb-1"></i><span class="block text-[10px] font-medium">Matches</span></a>
-                <a href="#" class="nav-item text-center text-white/70" onclick="navigateTo('walletPage')"><i class="fas fa-wallet fa-lg mb-1"></i><span class="block text-[10px] font-medium">Wallet</span></a>
-                <a href="#" class="nav-item text-center text-white/70" onclick="navigateTo('profilePage')"><i class="fas fa-user-cog fa-lg mb-1"></i><span class="block text-[10px] font-medium">Profile</span></a>
-
-
-              <a href="https://toolswebsite205.blogspot.com/p/privacy-policy_12.html" class="nav-item text-center text-white/70" onclick="navigateTo('profilePage')"><i class="fas fa-user-cog fa-lg mb-1"></i><span class="block text-[10px] font-medium"> Privacy Policy  </span></a>
-
-   </div> 
+                <a href="#" class="nav-item text-center text-white/60" onclick="navigateTo('homePage')"><i class="fas fa-gamepad fa-lg mb-1"></i><span class="block text-[10px] font-medium">Games</span></a>
+                <a href="#" class="nav-item text-center text-white/60" onclick="navigateTo('myTournamentsPage')"><i class="fas fa-trophy fa-lg mb-1"></i><span class="block text-[10px] font-medium">Matches</span></a>
+                <a href="#" class="nav-item text-center text-white/60" onclick="navigateTo('walletPage')"><i class="fas fa-wallet fa-lg mb-1"></i><span class="block text-[10px] font-medium">Wallet</span></a>
+                <a href="#" class="nav-item text-center text-white/60" onclick="navigateTo('profilePage')"><i class="fas fa-user-cog fa-lg mb-1"></i><span class="block text-[10px] font-medium">Profile</span></a>
+            </div> 
         </nav>
     </div>
 
     <!-- Modals -->
-    <!-- AUTH MODAL: New modal for Login/Signup -->
     <div id="authModal" class="modal fixed inset-0 bg-black bg-opacity-70 items-center justify-center z-50">
         <div class="bg-white p-6 rounded-lg w-11/12 max-w-sm border border-orange-200 shadow-lg relative">
             <button onclick="toggleModal('authModal', false)" class="absolute top-3 right-3 text-gray-500 hover:text-gray-700">
@@ -81,9 +111,11 @@
             </form>
             <form id="signupFormModal" class="space-y-4" style="display:none;">
                 <input type="text" id="signupUsernameModal" placeholder="Username" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                <p id="usernameAvailability" class="text-xs mt-1"></p> <!-- For username availability feedback -->
                 <input type="email" id="signupEmailModal" placeholder="Email" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
                 <input type="password" id="signupPasswordModal" placeholder="Password (min. 6 chars)" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
-                <button type="submit" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-700 hover:to-yellow-600 p-3 rounded-lg font-bold shadow-md transition-all">Create Account</button>
+                <input type="text" id="signupReferralCodeModal" placeholder="Referral Username (Optional)" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500">
+                <button type="submit" id="signupSubmitBtn" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-700 hover:to-yellow-600 p-3 rounded-lg font-bold shadow-md transition-all">Create Account</button>
             </form>
         </div>
     </div>
@@ -93,7 +125,7 @@
             <h3 class="text-xl font-bold mb-4 text-green-600">Deposit via EasyPaisa / JazzCash</h3>
             <p class="text-sm text-gray-600 mb-4">
                 Please send the desired amount to the following number via EasyPaisa or JazzCash:<br>
-                <strong class="text-red-600 text-lg">03105784772</strong><br>
+                <strong class="text-red-600 text-lg" id="admin-deposit-number">03105784772</strong><br>
                 After payment, enter the amount, Transaction ID (TID), and payment method below.
             </p>
             <form id="addMoneyForm" class="space-y-4">
@@ -122,16 +154,58 @@
                 <button type="button" onclick="toggleModal('withdrawMoneyModal', false)" class="w-full bg-gray-200 text-gray-700 p-3 rounded font-semibold">Cancel</button>
             </form>
 
-<p>
-Withdrawal Rules<br><br>
-
-1️⃣ Withdrawal sirf un users ke liye available hai jo Live Tournament Match play karte hain.<br><br>
-</p>
+            <p class="text-sm text-gray-600 mt-4">
+                Withdrawal Rules<br><br>
+                1️⃣ Withdrawal sirf un users ke liye available hai jo Live Tournament Match play karte hain.<br><br>
+            </p>
         </div>
+    </div>
 
+    <!-- NEW MODAL: Add New Game -->
+    <div id="addGameModal" class="modal fixed inset-0 bg-black bg-opacity-70 items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-lg w-11/12 max-w-sm border border-orange-200 shadow-lg relative">
+            <button onclick="toggleModal('addGameModal', false)" class="absolute top-3 right-3 text-gray-500 hover:text-gray-700">
+                <i class="fas fa-times fa-lg"></i>
+            </button>
+            <h3 class="text-xl font-bold mb-4 text-center text-gradient">Add New Game</h3>
+            
+            <!-- Policy Section (Changed to Accordion) -->
+            <details class="policy-accordion text-sm">
+                <summary>Game Submission Policy</summary>
+                <ul class="list-disc list-inside space-y-1">
+                    <li><span class="font-bold">Cost:</span> PKR 100 will be deducted from your wallet for each game submission.</li>
+                    <li><span class="font-bold">Duration:</span> Your game will be added and live for a minimum of 30 days. After this period, it may be reviewed for performance and compliance.</li>
+                    <li><span class="font-bold">No Violations:</span> Please ensure your game content and links do not violate any laws, contain adult/offensive material, or promote illegal activities. Broken or malicious links will result in immediate removal without refund.</li>
+                    <li><span class="font-bold">Review:</span> All submitted games are subject to admin review. We reserve the right to remove any game that violates our policies at any time.</li>
+                </ul>
+            </details>
+            
+            <form id="addGameForm" class="space-y-4">
+                <input type="text" id="gameTitleInput" placeholder="Game Title (e.g. Ludo)" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                <input type="url" id="gameImageUrlInput" placeholder="Image URL (Thumbnail)" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                <input type="url" id="gameUrlInput" placeholder="Game URL (e.g. ludo.html)" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                <button type="submit" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-700 hover:to-yellow-600 p-3 rounded-lg font-bold shadow-md transition-all">Add Game</button>
+            </form>
+        </div>
     </div>
     
     <div id="toast" class="fixed top-5 right-5 text-white py-2 px-4 rounded-lg shadow-lg" style="display: none; z-index: 1000;"></div>
+
+    <!-- NEW MODAL: Contact Us -->
+    <div id="contactUsModal" class="modal fixed inset-0 bg-black bg-opacity-70 items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-lg w-11/12 max-w-sm border border-orange-200 shadow-lg relative">
+            <button onclick="toggleModal('contactUsModal', false)" class="absolute top-3 right-3 text-gray-500 hover:text-gray-700">
+                <i class="fas fa-times fa-lg"></i>
+            </button>
+            <h3 class="text-xl font-bold mb-4 text-center text-gradient">Contact Us</h3>
+            <p class="text-center text-gray-600 mb-6">Have a question or need support? Send us a message!</p>
+            <form id="contactUsForm" class="space-y-4">
+                <input type="text" id="contactSubject" placeholder="Subject" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                <textarea id="contactMessage" placeholder="Your Message" rows="5" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required></textarea>
+                <button type="submit" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-700 hover:to-yellow-600 p-3 rounded-lg font-bold shadow-md transition-all">Send Message</button>
+            </form>
+        </div>
+    </div>
 
     <!-- Link to the separate script.js file -->
     <script src="script.js"></script>
