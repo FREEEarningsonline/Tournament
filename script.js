@@ -1,6 +1,3 @@
-document.addEventListener('contextmenu', event => event.preventDefault());
-document.body.style.userSelect = 'none';
-
 const firebaseConfig = {
     apiKey: "AIzaSyDR2OugzoVNnKN6OUKsPxC9ajldlhanteE",
     authDomain: "tournament-af6dd.firebaseapp.com",
@@ -17,22 +14,18 @@ const db = firebase.database();
 
 let currentUserData = null;
 let pendingAction = null; // Global to store action after login
-let incomingReferralCode = null; // Global to store referral code from URL
 
-// Parse URL for referral code on initial load
-const urlParams = new URLSearchParams(window.location.search);
-incomingReferralCode = urlParams.get('ref');
-if (incomingReferralCode) {
-    console.log('Incoming referral code:', incomingReferralCode);
-    // Optionally, clear the 'ref' from URL to make it cleaner, but browser history might be an issue.
-    // history.replaceState({}, document.title, window.location.pathname);
-}
+// Dynamic app settings (will be loaded from Firebase)
+let adminDepositNumber = '03105784772'; 
+let minWithdrawalAmount = 120; 
+let referralBonusAmount = 100; 
+let signupBonusAmount = 300; 
 
-// Navigation Logic for White Icons
+
 function navigateTo(pageId) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById(pageId)?.classList.add('active');
-    loadPageContent(pageId);
+    loadPageContent(pageId); 
 
     document.querySelectorAll('.nav-item').forEach(item => {
         const isActive = item.getAttribute('onclick').includes(pageId);
@@ -41,7 +34,7 @@ function navigateTo(pageId) {
         if (isActive) {
             item.classList.add('text-white', 'scale-125', '-translate-y-1', 'font-bold', 'drop-shadow-md');
         } else {
-            item.classList.add('text-white/60', 'scale-100');
+            item.classList.add('text-white/60', 'scale-100'); 
         }
     });
     window.scrollTo(0, 0);
@@ -61,23 +54,20 @@ function formatCurrency(amount) {
 
 function toggleModal(modalId, show) { document.getElementById(modalId).classList.toggle('active', show); }
 
-// Generic function to check login and then perform an action or show auth modal
 function checkLoginAndAct(event, actionType, ...args) {
-    event.preventDefault(); // Always prevent default button behavior
+    event.preventDefault(); 
 
     if (!auth.currentUser) {
         pendingAction = { type: actionType, args: args };
-        toggleModal('authModal', true); // Show the login/signup modal
+        toggleModal('authModal', true); 
         return;
     }
 
-    // If logged in, execute the action directly
     if (actionType === 'playGameUrl') {
         playGameUrl(...args);
     } else if (actionType === 'joinTournament') {
         joinTournament(event, ...args);
     }
-    // Add other actions as needed if they require login check
 }
 
 auth.onAuthStateChanged(async user => {
@@ -85,102 +75,130 @@ auth.onAuthStateChanged(async user => {
     document.getElementById('app-header').style.display = showAppControls ? 'flex' : 'none';
     document.getElementById('user-bottom-nav').style.display = showAppControls ? 'block' : 'none';
 
-    // Always navigate to homePage first, regardless of login status
-    // This ensures public games are always visible
-    navigateTo('homePage');
+    // Fetch app settings early (on auth state change)
+    const appSettingsSnap = await db.ref('app_settings').once('value');
+    const appSettings = appSettingsSnap.val();
+    if (appSettings) {
+        adminDepositNumber = appSettings.adminDepositNumber || adminDepositNumber;
+        minWithdrawalAmount = appSettings.minWithdrawalAmount || minWithdrawalAmount;
+        referralBonusAmount = appSettings.referralBonusAmount || referralBonusAmount;
+        signupBonusAmount = appSettings.signupBonusAmount || signupBonusAmount;
+        
+        const adminDepositNumEl = document.getElementById('admin-deposit-number');
+        if (adminDepositNumEl) adminDepositNumEl.textContent = adminDepositNumber;
+        const withdrawAmountInput = document.getElementById('withdraw-amount');
+        if (withdrawAmountInput) withdrawAmountInput.placeholder = `Enter amount min ${minWithdrawalAmount} (PKR)`;
+        const referralBonusTextEl = document.getElementById('referral-bonus-text'); 
+        if (referralBonusTextEl) referralBonusTextEl.textContent = referralBonusAmount;
+    }
 
     if (user) {
-        // 1. Check for GENERAL GAME REWARD (From Dashboard)
-        if (localStorage.getItem('game_played_pending') === 'true') {
-            localStorage.removeItem('game_played_pending');
-            const walletRef = db.ref(`users/${user.uid}/wallet_balance`);
-            walletRef.transaction((currentBalance) => {
-                return (currentBalance || 0) + 1;
-            }, (error, committed, snapshot) => {
-                if (error) { console.error('Transaction failed', error); }
-                else if (committed) {
-                    db.ref(`transactions/${user.uid}`).push({
-                        amount: 1, type: 'credit', description: 'Game Play Reward', created_at: new Date().toISOString()
-                    });
-                    showToast('🎉 You earned PKR 1 for playing!');
+        try {
+            // Attach real-time listener for currentUserData once user is logged in
+            // This will ensure UI updates automatically for wallet balance and referral count
+            db.ref('users/' + user.uid).on('value', snap => {
+                const updatedUserData = snap.val();
+                if (updatedUserData) {
+                    currentUserData = { uid: user.uid, ...updatedUserData }; 
+                    
+                    // Update header wallet balance
+                    const headerWalletBalanceEl = document.getElementById('header-wallet-balance');
+                    if (headerWalletBalanceEl) headerWalletBalanceEl.textContent = formatCurrency(currentUserData.wallet_balance || 0);
+                    
+                    // Update profile page content if active
+                    if (document.getElementById('profilePage').classList.contains('active')) {
+                        updateProfileContent();
+                    }
+                    // Update wallet page main balance if active
+                    if (document.getElementById('walletPage').classList.contains('active')) {
+                        const mainBalanceEl = document.getElementById('wallet-main-balance');
+                        if (mainBalanceEl) mainBalanceEl.textContent = formatCurrency(currentUserData.wallet_balance || 0);
+                    }
+                } else {
+                    console.log("DEBUG: Real-time listener received null data for user:", user.uid);
                 }
             });
-        }
 
-        // 2. Check for TOURNAMENT SCORE UPDATE (Survival Time)
-        const activeTid = localStorage.getItem('active_tournament_id');
-        if (activeTid) {
-            const startTime = parseInt(localStorage.getItem('game_start_time'));
-            if (startTime) {
-                const duration = Math.floor((Date.now() - startTime) / 1000);
-                localStorage.removeItem('active_tournament_id');
-                localStorage.removeItem('game_start_time');
-
-                db.ref(`participants/${activeTid}/${user.uid}`).update({
-                    score: duration,
-                    gameResult: `Survived: ${duration}s`
-                });
-                showToast(`Played for ${duration} seconds! Score updated.`);
-            }
-        }
-
-        // --- ENSURE currentUserData is loaded ONCE before initial render of user-specific content ---
-        try {
+            // Initial load of currentUserData (should be quick due to listener above)
             const userSnap = await db.ref('users/' + user.uid).once('value');
-            currentUserData = { uid: user.uid, ...userSnap.val() };
+            currentUserData = { uid: user.uid, ...(userSnap.val() || {}) };
+            if (!currentUserData.username) currentUserData.username = user.email ? user.email.split('@')[0] : 'User'; 
+            if (!currentUserData.email) currentUserData.email = user.email; 
+            if (typeof currentUserData.wallet_balance === 'undefined') currentUserData.wallet_balance = 0;
+            if (typeof currentUserData.referrals_earned_count === 'undefined') currentUserData.referrals_earned_count = 0;
+            if (typeof currentUserData.referral_code === 'undefined') currentUserData.referral_code = currentUserData.username; 
+            if (typeof currentUserData.locked === 'undefined') currentUserData.locked = false;
 
-            // Update header balance with initial data
-            const newBalanceFormatted = formatCurrency(currentUserData.wallet_balance || 0);
-            document.getElementById('wallet-balance-header').innerHTML = `<i class="fas fa-wallet text-red-500"></i> ${newBalanceFormatted}`;
-
-            // Re-render the current active page to update with user data
-            // Only if it's not the homePage, or if homePage needs user-specific elements to update
-            const currentPageId = document.querySelector('.page.active')?.id;
-            if (currentPageId && currentPageId !== 'homePage') {
-                loadPageContent(currentPageId);
-            } else if (!currentPageId) { // Fallback if no active page set (shouldn't happen with navigateTo('homePage'))
-                navigateTo('homePage');
+            if (currentUserData.locked) {
+                auth.signOut();
+                const lockReason = currentUserData.lockReason ? `Reason: ${currentUserData.lockReason}` : 'No specific reason provided.';
+                showToast(`Your account has been locked. Please contact support. ${lockReason}`, true);
+                return; 
             }
 
+            if (localStorage.getItem('game_played_pending') === 'true') {
+                localStorage.removeItem('game_played_pending');
+                const walletRef = db.ref(`users/${user.uid}/wallet_balance`);
+                walletRef.transaction((currentBalance) => {
+                    return (currentBalance || 0) + 1;
+                }, (error, committed, snapshot) => {
+                    if (error) { console.error('Transaction failed', error); }
+                    else if (committed) {
+                        db.ref(`transactions/${user.uid}`).push({
+                            amount: 1, type: 'credit', description: 'Game Play Reward', created_at: new Date().toISOString()
+                        });
+                        showToast('🎉 You earned PKR 1 for playing!');
+                    }
+                });
+            }
 
-            // Handle pending action after successful login
+            const activeTid = localStorage.getItem('active_tournament_id');
+            if (activeTid) {
+                const startTime = parseInt(localStorage.getItem('game_start_time'));
+                if (startTime) {
+                    const duration = Math.floor((Date.now() - startTime) / 1000);
+                    localStorage.removeItem('active_tournament_id');
+                    localStorage.removeItem('game_start_time');
+
+                    db.ref(`participants/${activeTid}/${user.uid}`).update({
+                        score: duration,
+                        gameResult: `Survived: ${duration}s`
+                    });
+                    showToast(`Played for ${duration} seconds! Score updated.`);
+                }
+            }
+            
+            // Update header balance immediately after initial load as well
+            const initialBalanceFormatted = formatCurrency(currentUserData.wallet_balance || 0);
+            const headerWalletBalanceEl = document.getElementById('header-wallet-balance');
+            if (headerWalletBalanceEl) headerWalletBalanceEl.textContent = initialBalanceFormatted;
+
             if (pendingAction) {
                 const { type, args } = pendingAction;
-                pendingAction = null; // Clear the pending action
-                toggleModal('authModal', false); // Close modal
+                pendingAction = null; 
+                toggleModal('authModal', false); 
                 if (type === 'playGameUrl') {
                     playGameUrl(...args);
                 } else if (type === 'joinTournament') {
-                    // Synthesize a minimal event object needed by joinTournament
                     const dummyEvent = { preventDefault: () => { }, target: { closest: () => ({ parentElement: { querySelector: () => ({ textContent: 'Tournament' }) } }) } };
                     joinTournament(dummyEvent, ...args);
                 }
             }
 
-            // --- Attach real-time listener for subsequent updates AFTER initial render ---
-            db.ref('users/' + user.uid).on('value', snap => {
-                currentUserData = { uid: user.uid, ...snap.val() };
-                const updatedBalanceFormatted = formatCurrency(currentUserData.wallet_balance || 0);
-                document.getElementById('wallet-balance-header').innerHTML = `<i class="fas fa-wallet text-red-500"></i> ${updatedBalanceFormatted}`;
-                const mainBalanceEl = document.getElementById('wallet-main-balance');
-                // Update main wallet balance if user is currently on the wallet page
-                if (mainBalanceEl && document.getElementById('walletPage').classList.contains('active')) {
-                    mainBalanceEl.textContent = updatedBalanceFormatted;
-                }
-            });
+            const initialPageId = document.querySelector('.page.active')?.id || 'homePage';
+            navigateTo(initialPageId); 
 
         } catch (error) {
             console.error("Error loading initial user data:", error);
             showToast("Failed to load user data. Please try again.", true);
-            auth.signOut(); // Force logout if initial data fails
+            auth.signOut(); 
         }
 
-    } else {
+    } else { 
         currentUserData = null;
-        // Reset header balance when logged out
-        document.getElementById('wallet-balance-header').innerHTML = `<i class="fas fa-wallet text-red-500"></i> PKR...`;
-        // Re-render the current active page to display "login required" messages
-        loadPageContent(document.querySelector('.page.active')?.id || 'homePage'); // Ensure current page updates for non-logged-in state
+        document.getElementById('header-wallet-balance').textContent = `PKR...`; // Update header on logout
+        
+        navigateTo('homePage'); 
     }
 });
 
@@ -188,17 +206,12 @@ function loadPageContent(pageId) {
     const pageContainer = document.getElementById(pageId);
     if (!pageContainer) return;
     switch (pageId) {
-        case 'loginPage': renderLoginPage(pageContainer); break; // This will now be empty or handled by modal
+        case 'loginPage': container.innerHTML = ''; break; 
         case 'homePage': renderHomePage(pageContainer); break;
         case 'myTournamentsPage': renderMyTournamentsPage(pageContainer); break;
         case 'walletPage': renderWalletPage(pageContainer); break;
         case 'profilePage': renderProfilePage(pageContainer); break;
     }
-}
-
-// renderLoginPage is no longer needed as a full page, login is via modal
-function renderLoginPage(container) {
-    container.innerHTML = ''; // Keep it empty as the modal handles login/signup
 }
 
 async function renderHomePage(container) {
@@ -213,7 +226,6 @@ async function renderHomePage(container) {
                     <div id="tournament-list" class="space-y-4"></div>
                 </div>`;
 
-    // Fetch Games (always public)
     db.ref('games').on('value', snapshot => {
         const games = snapshot.val();
         const gridEl = document.getElementById('games-grid');
@@ -241,9 +253,8 @@ async function renderHomePage(container) {
                 `).join('');
     });
 
-    // Fetch Tournaments (publicly visible, but 'Join' button changes based on login)
     const listEl = document.getElementById('tournament-list');
-    listEl.innerHTML = `<div class="text-center py-10"><i class="fas fa-spinner fa-spin fa-2x text-red-500"></i></div>`; // Loading spinner for tournaments
+    listEl.innerHTML = `<div class="text-center py-10"><i class="fas fa-spinner fa-spin fa-2x text-red-500"></i></div>`; 
 
     const tournaments = (await db.ref('tournaments').orderByChild('status').equalTo('Upcoming').once('value')).val();
     if (!tournaments) {
@@ -265,26 +276,23 @@ async function renderHomePage(container) {
                                 <div class="bg-white/60 p-2 rounded border border-red-100"><p class="text-gray-500 text-xs">Time</p><p class="font-bold text-gray-800">${new Date(t.match_time).toLocaleDateString()}</p></div>
                             </div>
                             <div class="p-3">
-                                <button onclick="${buttonAction}" class="w-full text-white bg-gradient-to-r from-red-600 to-orange-500 font-bold py-2 rounded-lg shadow hover:shadow-lg transition">${buttonText}</button>
+                                <button onclick="${buttonAction}" class="w-full text-white bg-gradient-to-r from-red-600 to-orange-500 font-bold py-2 rounded-lg shadow-lg hover:shadow-lg transition">${buttonText}</button>
                             </div>
                         </div>`;
         }).join('');
     }
 }
 
-// Logic to track game play for reward OR score
 function playGameUrl(url, tournamentId = null) {
-    if (!auth.currentUser) { // Defensive check, should be caught by checkLoginAndAct
+    if (!auth.currentUser) { 
         return showToast('Login required to play!', true);
     }
     if (!url) return showToast("Game URL missing!", true);
 
     if (tournamentId) {
-        // It's a tournament game - track time for survival score
         localStorage.setItem('active_tournament_id', tournamentId);
         localStorage.setItem('game_start_time', Date.now());
     } else {
-        // It's a dashboard game - track for PKR 1 reward
         localStorage.setItem('game_played_pending', 'true');
     }
     window.location.href = url;
@@ -496,7 +504,7 @@ async function renderMyTournamentsPage(container) {
     document.getElementById('completedContent').innerHTML = hasCompleted ? completedHtml : `<p class="text-center text-gray-500 py-8">No history available.</p>`;
 }
 
-function renderProfilePage(container) {
+async function renderProfilePage(container) {
     if (!auth.currentUser) {
         container.innerHTML = `
                     <div class="p-4 bg-orange-50 min-h-screen flex flex-col items-center justify-center text-center">
@@ -509,71 +517,239 @@ function renderProfilePage(container) {
         return;
     }
 
-    console.log("Rendering Profile Page with currentUserData:", currentUserData); // Debug log
-
-    // Generate referral link for the current user (PWA's own tracking)
-    const userReferralLink = generateReferralLink(currentUserData.uid);
-    const referralsEarned = currentUserData.referrals_earned_count || 0;
+    const userReferralCode = currentUserData?.username; 
+    const referralsEarned = currentUserData?.referrals_earned_count || 0; 
 
     container.innerHTML = `
                 <div class="p-4 space-y-6 bg-orange-50 min-h-screen">
-                    <div>
-                        <h2 class="text-2xl font-black mb-4 text-gray-800">Profile</h2>
+                    <h2 class="text-2xl font-black mb-4 text-gray-800">Profile & Settings</h2>
+
+                    <div id="mainProfileView" class="space-y-6">
+                        <!-- User Profile Details -->
                         <div class="bg-white border border-orange-100 p-6 rounded-xl shadow-md text-center">
                             <div class="w-20 h-20 bg-gradient-to-br from-red-500 to-yellow-500 rounded-full mx-auto flex items-center justify-center text-3xl text-white font-bold mb-3">
-                                ${currentUserData.username ? currentUserData.username[0].toUpperCase() : 'U'}
+                                ${currentUserData?.username ? currentUserData.username[0].toUpperCase() : 'U'}
                             </div>
-                            <p class="text-xl font-bold text-gray-800">${currentUserData.username || 'User'}</p>
-                            <p class="text-sm text-gray-500">${currentUserData.email}</p>
+                            <p class="text-xl font-bold text-gray-800">${currentUserData?.username || 'User'}</p>
+                            <p class="text-sm text-gray-500">${currentUserData?.email || auth.currentUser?.email || 'N/A'}</p>
                             <div class="mt-4 pt-4 border-t border-orange-100">
-                                <p class="text-md font-semibold text-gray-700">Referrals Joined: <span class="font-bold text-green-600">${referralsEarned}</span></p>
+                                <p class="text-md font-semibold text-gray-700">Referrals Joined: <span class="font-bold text-green-600" id="profile-referrals-count">${referralsEarned}</span></p>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Referral Link Section -->
-                    <div class="bg-white border border-orange-100 p-6 rounded-xl shadow-md space-y-4">
-                        <h3 class="font-bold text-lg text-gray-800">Invite Friends & Earn!</h3>
-                        <p class="text-sm text-gray-600">Share this link. You get <span class="font-bold text-green-600">PKR 10</span> for every friend who signs up!</p>
-                        <div class="flex items-center space-x-2">
-                            <input type="text" id="referralLinkInput" value="${userReferralLink}" readonly class="flex-1 p-2 bg-gray-100 rounded border border-gray-200 text-sm overflow-hidden text-ellipsis">
-                            <button onclick="copyReferralLink()" class="bg-blue-500 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-blue-600 transition">Copy</button>
+                        <!-- Referral Code Section (Updated) -->
+                        <div class="bg-white border border-orange-100 p-6 rounded-xl shadow-md space-y-4">
+                            <h3 class="font-bold text-lg text-gray-800">Invite Friends & Earn!</h3>
+                            <p class="text-sm text-gray-600">Share your username as referral code. You get <span class="font-bold text-green-600">PKR <span id="referral-bonus-text">${referralBonusAmount}</span></span> for every friend who signs up!</p>
+                            <div class="flex items-center space-x-2">
+                                <input type="text" id="referralLinkInput" value="${userReferralCode}" readonly class="flex-1 p-2 bg-gray-100 rounded border border-gray-200 text-sm overflow-hidden text-ellipsis">
+                                <button onclick="copyReferralLink()" class="bg-blue-500 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-blue-600 transition">Copy Code</button>
+                            </div>
+                            <p class="text-xs text-gray-500 italic mt-2">Friends must enter your username during signup to count as your referral.</p>
                         </div>
-                        <p class="text-xs text-gray-500 italic mt-2">Friends must click your link and sign up on this web app to count as your referral.</p>
-                    </div>
 
-                    <!-- Download App Button Section -->
-                    <div class="bg-gradient-to-r from-red-600 to-red-700 text-white p-6 rounded-xl shadow-lg text-center mt-6">
-                        <h3 class="font-bold text-xl mb-3">Get the Full App Experience!</h3>
-                        <p class="text-sm text-red-100 mb-4">Download our app from the Play Store for exclusive features and a smoother experience.</p>
-                        <a href="https://play.google.com/store/apps/details?id=com.edu.my" target="_blank" rel="noopener noreferrer" 
-                           class="inline-block bg-white text-red-600 px-6 py-3 rounded-full font-bold shadow-md hover:shadow-xl transition transform hover:scale-105 active:scale-95">
-                            <i class="fab fa-google-play mr-2"></i> Download on Play Store
-                        </a>
-                    </div>
+                        <!-- Download App Button Section -->
+                        <div class="bg-gradient-to-r from-red-600 to-red-700 text-white p-6 rounded-xl shadow-lg text-center mt-6">
+                            <h3 class="font-bold text-xl mb-3">Get the Full App Experience!</h3>
+                            <p class="text-sm text-red-100 mb-4">Download our app from the Play Store for exclusive features and a smoother experience.</p>
+                            <a href="https://play.google.com/store/apps/details?id=com.edu.my" target="_blank" rel="noopener noreferrer" 
+                               class="inline-block bg-white text-red-600 px-6 py-3 rounded-full font-bold shadow-md hover:shadow-xl transition transform hover:scale-105 active:scale-95">
+                                <i class="fab fa-google-play mr-2"></i> Download on Play Store
+                            </a>
+                        </div>
 
-                    <div class="space-y-3">
+                        <!-- Add New Game Button -->
+                        <button onclick="toggleModal('addGameModal', true)" class="w-full bg-gradient-to-r from-orange-500 to-yellow-500 text-white p-3 rounded-xl font-bold shadow-md hover:from-orange-600 hover:to-yellow-600 transition">
+                            <i class="fas fa-plus-circle mr-2"></i> Add New Game
+                        </button>
+
+                        <!-- Reset Password Button -->
                         <button onclick="changePassword()" class="w-full bg-white text-gray-700 border border-gray-300 p-3 rounded-xl font-bold shadow-sm">Reset Password</button>
+
+                        <!-- NEW MENU for Policies & Contact -->
+                        <div id="policyMenuButtons" class="space-y-4 pt-4 border-t border-orange-100">
+                            <button class="w-full bg-white text-gray-700 border border-gray-300 p-4 rounded-xl font-bold shadow-sm flex items-center justify-between transition transform hover:scale-105 active:scale-95" onclick="showPolicySection('privacy_policy')">
+                                <span><i class="fas fa-shield-alt mr-3 text-blue-500"></i>Privacy Policy</span> <i class="fas fa-chevron-right text-gray-400"></i>
+                            </button>
+                            <button class="w-full bg-white text-gray-700 border border-gray-300 p-4 rounded-xl font-bold shadow-sm flex items-center justify-between transition transform hover:scale-105 active:scale-95" onclick="showPolicySection('about_us')">
+                                <span><i class="fas fa-info-circle mr-3 text-green-500"></i>About Us</span> <i class="fas fa-chevron-right text-gray-400"></i>
+                            </button>
+                            <button class="w-full bg-white text-gray-700 border border-gray-300 p-4 rounded-xl font-bold shadow-sm flex items-center justify-between transition transform hover:scale-105 active:scale-95" onclick="showPolicySection('terms_conditions')">
+                                <span><i class="fas fa-file-contract mr-3 text-purple-500"></i>Terms & Conditions</span> <i class="fas fa-chevron-right text-gray-400"></i>
+                            </button>
+                            <button class="w-full bg-white text-gray-700 border border-gray-300 p-4 rounded-xl font-bold shadow-sm flex items-center justify-between transition transform hover:scale-105 active:scale-95" onclick="showPolicySection('deposit_rules')">
+                                <span><i class="fas fa-money-bill-wave mr-3 text-orange-500"></i>Deposit Rules</span> <i class="fas fa-chevron-right text-gray-400"></i>
+                            </button>
+                            <button class="w-full bg-white text-gray-700 border border-gray-300 p-4 rounded-xl font-bold shadow-sm flex items-center justify-between transition transform hover:scale-105 active:scale-95" onclick="showPolicySection('withdrawal_rules')">
+                                <span><i class="fas fa-cash-register mr-3 text-teal-500"></i>Withdrawal Rules</span> <i class="fas fa-chevron-right text-gray-400"></i>
+                            </button>
+                            <button class="w-full bg-white text-gray-700 border border-gray-300 p-4 rounded-xl font-bold shadow-sm flex items-center justify-between transition transform hover:scale-105 active:scale-95" onclick="showMySupportMessages()">
+                                <span><i class="fas fa-inbox mr-3 text-gray-500"></i>My Support Messages</span> <i class="fas fa-chevron-right text-gray-400"></i>
+                            </button>
+                        </div>
+                        
                         <button onclick="logout()" class="w-full text-white bg-gradient-to-r from-red-500 to-red-700 p-3 rounded-xl font-bold shadow-md">Logout</button>
                     </div>
+
+                    <!-- Policy Content Sections (initially hidden) -->
+                    <div id="policyContentArea" class="space-y-4" style="display:none;">
+                        <button onclick="showMainProfileView()" class="w-full bg-gray-200 text-gray-700 p-3 rounded-xl font-bold shadow-sm mb-4 transition transform hover:scale-105 active:scale-95"><i class="fas fa-arrow-left mr-2"></i>Back to Profile</button>
+                        
+                        <div id="policy-content-display" class="bg-white border border-orange-100 p-6 rounded-xl shadow-md" style="display:none;">
+                            <h3 class="font-bold text-lg mb-4 text-gradient" id="policy-display-title"></h3>
+                            <div class="text-gray-700 text-sm leading-relaxed space-y-3" id="policy-display-body"></div> 
+                        </div>
+
+                        <!-- NEW: My Support Messages Section -->
+                        <div id="mySupportMessagesSection" class="bg-white border border-orange-100 p-6 rounded-xl shadow-md" style="display:none;">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="font-bold text-lg text-gradient">My Support Messages</h3>
+                                <button onclick="toggleModal('contactUsModal', true)" class="bg-red-500 text-white px-3 py-2 rounded-lg text-xs font-bold shadow"><i class="fas fa-plus-circle mr-1"></i> New Message</button>
+                            </div>
+                            <div id="user-contact-messages-list" class="space-y-3">
+                                <p class="text-center text-gray-400 italic">Loading your messages...</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>`;
+    updateProfileContent(); 
 }
 
-// Helper function to generate referral link
+function showPolicySection(contentKey) {
+    document.getElementById('mainProfileView').style.display = 'none';
+    document.getElementById('policyContentArea').style.display = 'block';
+
+    document.getElementById('policy-content-display').style.display = 'none';
+    document.getElementById('mySupportMessagesSection').style.display = 'none';
+
+    document.getElementById('policy-content-display').style.display = 'block';
+
+    db.ref(`app_content/${contentKey}`).once('value').then(contentSnap => {
+        const contentData = contentSnap.val();
+        if (contentData) {
+            document.getElementById('policy-display-title').textContent = contentData.displayTitle;
+            document.getElementById('policy-display-body').innerHTML = contentData.body.replace(/\n/g, '<br>'); 
+        } else {
+            document.getElementById('policy-display-title').textContent = 'Content Not Found';
+            document.getElementById('policy-display-body').textContent = 'The requested content is not available. Please contact support.';
+        }
+        window.scrollTo(0, 0);
+    }).catch(error => {
+        console.error("Error fetching policy content:", error);
+        showToast("Failed to load policy content.", true);
+    });
+}
+
+async function showMySupportMessages() {
+    document.getElementById('mainProfileView').style.display = 'none';
+    document.getElementById('policyContentArea').style.display = 'block';
+
+    document.getElementById('policy-content-display').style.display = 'none';
+
+    document.getElementById('mySupportMessagesSection').style.display = 'block';
+
+    const listEl = document.getElementById('user-contact-messages-list');
+    listEl.innerHTML = `<p class="text-center text-gray-400 italic">Loading your messages...</p>`;
+
+    if (!auth.currentUser) {
+        listEl.innerHTML = `<p class="text-center text-red-500 italic">Login required to view messages.</p>`;
+        return;
+    }
+
+    db.ref('contact_messages').orderByChild('userId').equalTo(auth.currentUser.uid).on('value', snap => {
+        const messages = snap.val();
+        
+        if (!messages) {
+            listEl.innerHTML = `<p class="text-center text-gray-400 italic">You have not sent any messages yet.</p>`;
+            return;
+        }
+
+        let messagesHtml = '';
+        const messageArray = Object.entries(messages).map(([id, msg]) => ({id, ...msg}));
+        messageArray.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); 
+
+        for (const msg of messageArray) {
+            const statusClass = msg.status === 'pending' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700';
+            const icon = msg.status === 'pending' ? 'fas fa-hourglass-half' : 'fas fa-check-circle';
+            const adminReplyHtml = msg.adminReply 
+                ? `<div class="bg-blue-50 p-2 rounded-md mt-2 text-sm border border-blue-200"><strong class="text-blue-700">Admin Reply:</strong> ${msg.adminReply.replace(/\n/g, '<br>')}</div>`
+                : `<p class="text-xs text-gray-500 italic mt-2">Admin has not replied yet.</p>`;
+
+            messagesHtml += `
+                <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                    <div class="flex justify-between items-center mb-2">
+                        <p class="font-bold text-gray-800">${msg.subject}</p>
+                        <span class="text-xs font-semibold px-2 py-1 rounded-full ${statusClass}"><i class="${icon} mr-1"></i>${msg.status.toUpperCase()}</span>
+                    </div>
+                    <p class="text-sm text-gray-600">Message: <span class="block mt-1 bg-gray-50 p-2 rounded text-xs">${msg.message.replace(/\n/g, '<br>')}</span></p>
+                    ${adminReplyHtml}
+                    <p class="text-xs text-gray-400 mt-2">Sent: ${new Date(msg.timestamp).toLocaleString()}</p>
+                </div>
+            `;
+        }
+        listEl.innerHTML = messagesHtml;
+    });
+
+    window.scrollTo(0, 0);
+}
+
+function showMainProfileView() {
+    document.getElementById('mainProfileView').style.display = 'block';
+    document.getElementById('policyContentArea').style.display = 'none';
+    document.getElementById('policy-content-display').style.display = 'none';
+    document.getElementById('mySupportMessagesSection').style.display = 'none';
+    window.scrollTo(0, 0); 
+}
+
+function updateProfileContent() {
+    if (currentUserData) {
+        const usernameEl = document.querySelector('#mainProfileView .text-xl.font-bold');
+        if (usernameEl) usernameEl.textContent = currentUserData.username || 'User';
+        const emailEl = document.querySelector('#mainProfileView .text-sm.text-gray-500');
+        if (emailEl) emailEl.textContent = currentUserData.email || auth.currentUser?.email || 'N/A';
+        
+        // Update profile page referral count
+        const referralsEarnedEl = document.getElementById('profile-referrals-count'); 
+        if (referralsEarnedEl) {
+            const countToDisplay = currentUserData.referrals_earned_count || 0;
+            referralsEarnedEl.textContent = countToDisplay;
+        }
+        
+        const referralLinkInput = document.getElementById('referralLinkInput');
+        if (referralLinkInput) {
+            referralLinkInput.value = currentUserData.username || '';
+        }
+
+        const referralBonusTextEl = document.getElementById('referral-bonus-text');
+        if (referralBonusTextEl) {
+            referralBonusTextEl.textContent = referralBonusAmount; 
+        }
+
+        const withdrawAmountInput = document.getElementById('withdraw-amount');
+        if (withdrawAmountInput) {
+            withdrawAmountInput.placeholder = `Enter amount min ${minWithdrawalAmount} (PKR)`;
+        }
+        
+        const adminDepositNumEl = document.getElementById('admin-deposit-number');
+        if (adminDepositNumEl) {
+            adminDepositNumEl.textContent = adminDepositNumber;
+        }
+    } else {
+        console.warn("DEBUG: updateProfileContent called but currentUserData is null.");
+    }
+}
+
 function generateReferralLink(uid) {
-    // This link is for tracking referrals *within this web application*.
-    // The Google Play Store 'referrer' parameter works differently and is typically for native Android apps.
-    return `https://freeearningsonline.github.io/Tournament/?ref=${encodeURIComponent(uid)}`;
+    return currentUserData?.username || ''; 
 }
 
-// Function to copy referral link to clipboard
 function copyReferralLink() {
     const referralLinkInput = document.getElementById('referralLinkInput');
     if (referralLinkInput) {
         referralLinkInput.select();
-        referralLinkInput.setSelectionRange(0, 99999); // For mobile devices
+        referralLinkInput.setSelectionRange(0, 99999); 
         document.execCommand('copy');
-        showToast('Referral link copied!');
+        showToast('Referral username copied!'); 
     }
 }
 
@@ -583,16 +759,27 @@ function attachLoginListeners() {
     const loginForm = document.getElementById('loginFormModal');
     const signupForm = document.getElementById('signupFormModal');
 
-    if (!loginTab || !signupTab || !loginForm || !signupForm) {
+    const signupUsernameModal = document.getElementById('signupUsernameModal');
+    const usernameAvailability = document.getElementById('usernameAvailability');
+    const signupSubmitBtn = document.getElementById('signupSubmitBtn');
+    const signupReferralCodeModal = document.getElementById('signupReferralCodeModal'); 
+
+    if (!loginTab || !signupTab || !loginForm || !signupForm || !signupUsernameModal || !usernameAvailability || !signupSubmitBtn || !signupReferralCodeModal) {
         console.warn("Auth modal elements not found, skipping attaching listeners.");
         return;
     }
+    
+    signupSubmitBtn.disabled = true;
 
     loginTab.addEventListener('click', () => {
         loginTab.className = "flex-1 py-2 text-center font-bold border-b-4 border-red-500 text-red-600";
         signupTab.className = "flex-1 py-2 text-center font-bold text-gray-400 border-b-4 border-transparent";
         loginForm.style.display = 'block';
         signupForm.style.display = 'none';
+        signupSubmitBtn.disabled = true; 
+        usernameAvailability.textContent = '';
+        signupUsernameModal.value = '';
+        signupReferralCodeModal.value = ''; 
     });
 
     signupTab.addEventListener('click', () => {
@@ -600,6 +787,46 @@ function attachLoginListeners() {
         loginTab.className = "flex-1 py-2 text-center font-bold text-gray-400 border-b-4 border-transparent";
         signupForm.style.display = 'block';
         loginForm.style.display = 'none';
+        signupSubmitBtn.disabled = true; 
+        usernameAvailability.textContent = '';
+        signupUsernameModal.value = '';
+        signupReferralCodeModal.value = ''; 
+    });
+
+    let usernameTimer;
+    signupUsernameModal.addEventListener('input', () => {
+        clearTimeout(usernameTimer);
+        const username = signupUsernameModal.value.trim();
+        
+        if (username.length < 3) {
+            usernameAvailability.textContent = 'Username must be at least 3 characters.';
+            usernameAvailability.className = 'text-xs mt-1 text-red-500';
+            signupSubmitBtn.disabled = true;
+            return;
+        }
+        if (!/^[a-zA-Z0-9_.-]+$/.test(username)) { 
+            usernameAvailability.textContent = 'Invalid characters. Use letters, numbers, _, ., -';
+            usernameAvailability.className = 'text-xs mt-1 text-red-500';
+            signupSubmitBtn.disabled = true;
+            return;
+        }
+
+        usernameAvailability.textContent = 'Checking availability...';
+        usernameAvailability.className = 'text-xs mt-1 text-gray-500';
+        signupSubmitBtn.disabled = true; 
+
+        usernameTimer = setTimeout(async () => {
+            const snap = await db.ref('usernames/' + username.toLowerCase()).once('value');
+            if (snap.exists()) {
+                usernameAvailability.textContent = 'Username is already taken.';
+                usernameAvailability.className = 'text-xs mt-1 text-red-500';
+                signupSubmitBtn.disabled = true;
+            } else {
+                usernameAvailability.textContent = 'Username is available!';
+                usernameAvailability.className = 'text-xs mt-1 text-green-500';
+                signupSubmitBtn.disabled = false;
+            }
+        }, 500); 
     });
 
     loginForm.addEventListener('submit', async e => {
@@ -607,8 +834,8 @@ function attachLoginListeners() {
         try {
             await auth.signInWithEmailAndPassword(e.target.loginEmailModal.value, e.target.loginPasswordModal.value);
             showToast('Login successful!');
-            toggleModal('authModal', false); // Close modal on success
-            e.target.reset(); // Clear form
+            toggleModal('authModal', false);
+            e.target.reset();
         } catch (err) {
             showToast(err.message, true);
         }
@@ -616,50 +843,108 @@ function attachLoginListeners() {
 
     signupForm.addEventListener('submit', async e => {
         e.preventDefault();
-        const { signupUsernameModal, signupEmailModal, signupPasswordModal } = e.target;
+        const { signupUsernameModal, signupEmailModal, signupPasswordModal, signupReferralCodeModal } = e.target;
+        const enteredReferralCode = signupReferralCodeModal.value.trim().toLowerCase(); 
+        const username = signupUsernameModal.value.trim();
+
+        // --- Username Already Exist Check (Final Check before Auth Create) ---
+        const finalCheckSnap = await db.ref('usernames/' + username.toLowerCase()).once('value');
+        if (finalCheckSnap.exists()) {
+            showToast('Username is already taken. Please choose another.', true);
+            signupUsernameModal.focus(); 
+            return;
+        }
+        // --- END Username Already Exist Check ---
+        
         try {
             const cred = await auth.createUserWithEmailAndPassword(signupEmailModal.value, signupPasswordModal.value);
-            await db.ref('users/' + cred.user.uid).set({
-                username: signupUsernameModal.value,
+            const newUserId = cred.user.uid;
+            
+            const initialSignupBonus = signupBonusAmount; 
+            
+            const newUserDbRef = db.ref('users/' + newUserId);
+            const newUserData = {
+                username: username, 
                 email: signupEmailModal.value,
-                wallet_balance: 0,
+                wallet_balance: initialSignupBonus, 
                 created_at: new Date().toISOString(),
-                referral_code: cred.user.uid, // Store their own referral code
-                referrals_earned_count: 0 // Initialize count of referrals they brought in
-            });
+                referral_code: username, 
+                referrals_earned_count: 0, // Default to 0
+                locked: false,
+                lockReason: null
+            };
+            
+            // --- TEMPORARY CLIENT-SIDE REFERRAL LOGIC FOR TESTING ---
+            // WARNING: This is INSECURE for production. Use Cloud Functions for production.
+            if (enteredReferralCode && enteredReferralCode !== username.toLowerCase()) {
+                const referrerUserSnap = await db.ref('usernames/' + enteredReferralCode).once('value');
+                if (referrerUserSnap.exists()) {
+                    const referrerUid = referrerUserSnap.val();
+                    
+                    // --- NEW: Duplicate Referral Block Check for the new user ---
+                    // This check is to ensure that a *newly signing up user* hasn't somehow already been referred.
+                    // In a normal flow, newUserData won't have referred_by_username yet.
+                    // This is defensive, more critical is checking if referrer has already been rewarded for THIS specific user.
+                    // For client-side, we'll just check if the new user's DB entry already has referred_by_username
+                    const existingNewUserDataSnap = await db.ref(`users/${newUserId}`).once('value');
+                    const existingNewUserData = existingNewUserDataSnap.val();
 
-            // --- Referral Bonus Logic ---
-            if (incomingReferralCode && incomingReferralCode !== cred.user.uid) { // Ensure self-referral is not allowed
-                const referrerRef = db.ref(`users/${incomingReferralCode}`);
-                const referrerSnap = await referrerRef.once('value');
-                if (referrerSnap.exists()) {
-                    const referrerData = referrerSnap.val();
-                    const referralBonusAmount = 10; // 10 PKR
+                    if (existingNewUserData && existingNewUserData.referred_by_username) {
+                        showToast(`User ${username} has already been referred. Skipping new referral bonus.`, true);
+                        console.warn(`DEBUG: User ${username} (UID: ${newUserId}) already has referred_by_username set. Not processing duplicate referral.`);
+                    } else {
+                        // Update referrer's data
+                        const referrerRef = db.ref(`users/${referrerUid}`);
+                        await referrerRef.transaction(currentReferrerData => {
+                            if (currentReferrerData) {
+                                currentReferrerData.wallet_balance = (currentReferrerData.wallet_balance || 0) + referralBonusAmount;
+                                currentReferrerData.referrals_earned_count = (currentReferrerData.referrals_earned_count || 0) + 1;
+                            }
+                            return currentReferrerData;
+                        });
 
-                    // Update referrer's balance
-                    await referrerRef.update({
-                        wallet_balance: (referrerData.wallet_balance || 0) + referralBonusAmount,
-                        referrals_earned_count: (referrerData.referrals_earned_count || 0) + 1
-                    });
-
-                    // Record transaction for the referrer
-                    db.ref(`transactions/${incomingReferralCode}`).push({
-                        amount: referralBonusAmount,
-                        type: 'credit',
-                        description: `Referral bonus for new user: ${signupUsernameModal.value}`,
-                        created_at: new Date().toISOString()
-                    });
-                    // No toast for referrer, it's a background process from the new user's perspective
-                    console.log(`Referral bonus of ${referralBonusAmount} PKR added for ${referrerData.username}!`);
+                        // Add transaction record for referrer
+                        db.ref(`transactions/${referrerUid}`).push({
+                            amount: referralBonusAmount,
+                            type: 'credit',
+                            description: `Referral Bonus for ${username}`,
+                            created_at: new Date().toISOString()
+                        });
+                        
+                        newUserData.referred_by_username = enteredReferralCode; // Set referrer for new user's data
+                        showToast(`Account created! You received PKR ${initialSignupBonus}. Referrer ${enteredReferralCode} also rewarded!`);
+                        console.log(`User ${newUserId} signed up with referral username: ${enteredReferralCode}. Referrer ${referrerUid} rewarded.`);
+                    }
+                } else {
+                    showToast("Invalid referral username entered. Account created without referral bonus.", true);
+                    console.log(`User ${newUserId} signed up with an invalid referral username: ${enteredReferralCode}.`);
                 }
+            } else if (enteredReferralCode && enteredReferralCode === username.toLowerCase()) {
+                showToast("You cannot refer yourself. Account created without referral bonus.", true);
+                console.log(`Self-referral attempted by ${newUserId}.`);
+            } else {
+                showToast(`Account created and logged in! You received PKR ${initialSignupBonus} as a bonus!`);
+                console.log(`User ${newUserId} signed up without a referral username.`);
             }
-            incomingReferralCode = null; // Clear after use
+            // --- END TEMPORARY CLIENT-SIDE REFERRAL LOGIC ---
 
-            showToast('Account created and logged in!');
-            toggleModal('authModal', false); // Close modal on success
-            e.target.reset(); // Clear form
+            await db.ref('usernames/' + username.toLowerCase()).set(newUserId); // Set username mapping
+            await newUserDbRef.set(newUserData); // Save new user data (including referred_by_username if applicable)
+
+            db.ref(`transactions/${newUserId}`).push({
+                amount: initialSignupBonus,
+                type: 'credit',
+                description: 'Signup Bonus',
+                created_at: new Date().toISOString()
+            });
+            
+            toggleModal('authModal', false);
+            e.target.reset(); 
+            signupReferralCodeModal.value = ''; 
+            usernameAvailability.textContent = ''; 
 
         } catch (err) {
+            console.error("Error during signup:", err);
             showToast(err.message, true);
         }
     });
@@ -683,15 +968,18 @@ function attachMyTournamentsListeners() {
 async function joinTournament(event, tournamentId, entryFee) {
     event.preventDefault();
     const user = auth.currentUser;
-    if (!user) return showToast('Login required!', true); // Defensive check
+    if (!user) return showToast('Login required!', true); 
+    if (!currentUserData || currentUserData.locked) {
+        auth.signOut(); 
+        const lockReason = currentUserData?.lockReason ? `Reason: ${currentUserData.lockReason}` : '';
+        return showToast(`Your account is locked. Please contact support. ${lockReason}`, true);
+    }
     if (currentUserData.wallet_balance < entryFee) return showToast('Insufficient balance!', true);
     if ((await db.ref(`participants/${tournamentId}/${user.uid}`).once('value')).exists()) return showToast("Already joined!", true);
 
-    // Fetch tournament title for transaction description
     const tournamentSnap = await db.ref(`tournaments/${tournamentId}/title`).once('value');
     const tournamentTitle = tournamentSnap.val() || 'Unknown Tournament';
 
-    // Generate a unique key for the transaction
     const newTransactionKey = db.ref().child('transactions').child(user.uid).push().key;
 
     const updates = {
@@ -702,13 +990,11 @@ async function joinTournament(event, tournamentId, entryFee) {
     await db.ref().update(updates);
     showToast('Joined successfully!');
 
-    // After joining, re-render myTournamentsPage if the user is currently on it
     if (document.getElementById('myTournamentsPage').classList.contains('active')) {
         renderMyTournamentsPage(document.getElementById('myTournamentsPage'));
     }
 }
 
-// Updated addMoney function for EasyPaisa/JazzCash deposit with TID and source type
 async function addMoney(event) {
     event.preventDefault();
     const amount = Number(document.getElementById('add-amount').value);
@@ -727,8 +1013,12 @@ async function addMoney(event) {
 
     const user = auth.currentUser;
     if (!user) return showToast('Login required!', true);
+    if (!currentUserData || currentUserData.locked) {
+        auth.signOut();
+        const lockReason = currentUserData?.lockReason ? `Reason: ${currentUserData.lockReason}` : '';
+        return showToast(`Your account is locked. Please contact support. ${lockReason}`, true);
+    }
 
-    // Create a pending deposit request in Firebase
     await db.ref(`pending_deposits/${user.uid}`).push({
         amount: amount,
         tid: tid,
@@ -744,7 +1034,6 @@ async function addMoney(event) {
     event.target.reset();
 }
 
-// Updated withdrawMoney function for EasyPaisa/JazzCash withdrawal
 async function withdrawMoney(event) {
     event.preventDefault();
 
@@ -753,97 +1042,186 @@ async function withdrawMoney(event) {
     const ownerName = document.getElementById('withdraw-owner-name').value.trim();
     const accountType = document.getElementById('withdraw-account-type').value.trim();
 
-    if (amount <= 0) {
-        return showToast('Amount must be positive!', true);
+    if (amount < minWithdrawalAmount) { 
+        return showToast(`Minimum withdrawal amount is ${formatCurrency(minWithdrawalAmount)}`, true);
     }
 
     if (!withdrawNumber || !ownerName || !accountType) {
         return showToast('Please fill all withdrawal details!', true);
     }
-
+    
+    const user = auth.currentUser;
+    if (!user) {
+        return showToast('Login required!', true);
+    }
+    if (!currentUserData || currentUserData.locked) {
+        auth.signOut();
+        const lockReason = currentUserData?.lockReason ? `Reason: ${currentUserData.lockReason}` : '';
+        return showToast(`Your account is locked. Please contact support. ${lockReason}`, true);
+    }
     if (amount > currentUserData.wallet_balance) {
         return showToast('Insufficient funds!', true);
     }
 
-    const user = auth.currentUser;
-
-    if (!user) {
-        return showToast('Login required!', true);
-    }
-
     const uid = user.uid;
-    const newBalance = currentUserData.wallet_balance - amount;
 
     try {
+        const withdrawalRequestKey = db.ref("pending_withdrawals/" + uid).push().key;
 
-        // Transaction reference
-        const transactionRef = db.ref("transactions/" + uid).push();
-
-        // Pending withdrawal reference
-        const withdrawalRef = db.ref("pending_withdrawals/" + uid).push();
-
-        // Save transaction
-        await transactionRef.set({
-            amount: amount,
-            type: "debit",
-            description: "Withdrawal initiated",
-            status: "requested",
-            created_at: Date.now()
-        });
-
-        // Save withdrawal request
-        await withdrawalRef.set({
+        await db.ref("pending_withdrawals/" + uid + "/" + withdrawalRequestKey).set({
             amount: amount,
             status: "pending",
             withdrawal_account: withdrawNumber,
             withdrawal_owner_name: ownerName,
             withdrawal_account_type: accountType,
-            created_at: Date.now(),
+            created_at: new Date().toISOString(),
             user_uid: uid,
             user_email: currentUserData.email || user.email,
-            user_username: currentUserData.username || "N/A",
-            transaction_id: transactionRef.key
+            user_username: currentUserData.username || "N/A"
         });
 
-        // Update wallet balance
-        await db.ref("users/" + uid + "/wallet_balance").set(newBalance);
-
-        showToast("Withdrawal request sent! Waiting for admin approval.");
-
+        showToast("Withdrawal request sent! Waiting for admin approval. Amount will be deducted upon approval.");
         toggleModal("withdrawMoneyModal", false);
-
         event.target.reset();
 
     } catch (error) {
-
-        console.error(error);
+        console.error("Error during withdrawal request:", error);
         showToast("Withdrawal failed. Please try again.", true);
-
     }
 }
+
+async function addNewGame(event) {
+    event.preventDefault();
+    const user = auth.currentUser;
+    if (!user) {
+        showToast('Login required to add games!', true);
+        return;
+    }
+    if (!currentUserData || currentUserData.locked) {
+        auth.signOut();
+        const lockReason = currentUserData?.lockReason ? `Reason: ${currentUserData.lockReason}` : '';
+        return showToast(`Your account is locked. Please contact support. ${lockReason}`, true);
+    }
+
+    const gameTitle = document.getElementById('gameTitleInput').value.trim();
+    const gameImageUrl = document.getElementById('gameImageUrlInput').value.trim();
+    const gameUrl = document.getElementById('gameUrlInput').value.trim();
+
+    if (!gameTitle || !gameImageUrl || !gameUrl) {
+        showToast('All fields are required!', true);
+        return;
+    }
+
+    const gameCost = 100; 
+
+    if (!currentUserData || (currentUserData.wallet_balance || 0) < gameCost) {
+        showToast(`Insufficient balance. You need ${formatCurrency(gameCost)} to add a game.`, true);
+        return;
+    }
+
+    try {
+        const userWalletRef = db.ref(`users/${user.uid}/wallet_balance`);
+        const gameRef = db.ref('games').push(); 
+        const transactionRef = db.ref(`transactions/${user.uid}`).push(); 
+
+        let committed = false;
+        await userWalletRef.transaction(currentBalance => {
+            if (currentBalance !== null && currentBalance >= gameCost) {
+                return currentBalance - gameCost;
+            }
+            return undefined;
+        }, async (error, _committed, snapshot) => {
+            if (error) {
+                console.error("Transaction failed: ", error);
+                showToast("Failed to deduct game cost. Please try again.", true);
+            } else if (_committed) {
+                committed = true;
+                await gameRef.set({
+                    title: gameTitle,
+                    image_url: gameImageUrl,
+                    game_url: gameUrl,
+                    created_by: user.uid,
+                    created_at: new Date().toISOString()
+                });
+                await transactionRef.set({
+                    amount: gameCost,
+                    type: 'debit',
+                    description: `Cost to add new game: ${gameTitle}`,
+                    created_at: new Date().toISOString()
+                });
+
+                showToast('Game added successfully and PKR 100 deducted from your wallet!');
+                toggleModal('addGameModal', false); 
+                event.target.reset(); 
+                loadPageContent('homePage');
+            } else {
+                showToast(`Transaction aborted: Insufficient balance. You need ${formatCurrency(gameCost)} to add a game.`, true);
+            }
+        });
+
+    } catch (error) {
+        console.error("Error adding game or deducting balance:", error);
+        showToast('Failed to add game. Please try again.', true);
+    }
+}
+
+async function sendContactMessage(event) {
+    event.preventDefault();
+    const user = auth.currentUser;
+    if (!user) {
+        showToast('Login required to send a message!', true);
+        return;
+    }
+    if (!currentUserData || currentUserData.locked) {
+        auth.signOut();
+        const lockReason = currentUserData?.lockReason ? `Reason: ${currentUserData.lockReason}` : '';
+        return showToast(`Your account is locked. Please contact support. ${lockReason}`, true);
+    }
+
+    const subject = document.getElementById('contactSubject').value.trim();
+    const message = document.getElementById('contactMessage').value.trim();
+
+    if (!subject || !message) {
+        showToast('Subject and Message cannot be empty!', true);
+        return;
+    }
+
+    try {
+        await db.ref('contact_messages').push({
+            userId: user.uid, 
+            username: currentUserData.username || 'N/A',
+            email: currentUserData.email || user.email,
+            subject: subject,
+            message: message,
+            timestamp: new Date().toISOString(),
+            status: 'pending' 
+        });
+        showToast('Message sent successfully!');
+        toggleModal('contactUsModal', false);
+        event.target.reset(); 
+    } catch (error) {
+        console.error("Error sending contact message:", error);
+        showToast('Failed to send message. Please try again.', true);
+    }
+}
+
 
 function logout() {
     auth.signOut();
 }
 
 function changePassword() {
-
     const user = auth.currentUser;
-
     if (user && user.email) {
-
         auth.sendPasswordResetEmail(user.email)
             .then(() => showToast(`Password reset link sent to ${user.email}.`))
             .catch(err => showToast(err.message, true));
-
     } else {
-
         showToast("No active user or email found.", true);
-
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
 
     if (firebase.apps.length) {
 
@@ -853,6 +1231,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
         document.getElementById('withdrawMoneyForm').addEventListener('submit', withdrawMoney);
 
-    }
+        document.getElementById('addGameForm').addEventListener('submit', addNewGame);
 
+        document.getElementById('contactUsForm').addEventListener('submit', sendContactMessage);
+
+        const appSettingsSnap = await db.ref('app_settings').once('value');
+        const appSettings = appSettingsSnap.val();
+        if (appSettings) {
+            adminDepositNumber = appSettings.adminDepositNumber || adminDepositNumber;
+            minWithdrawalAmount = appSettings.minWithdrawalAmount || minWithdrawalAmount;
+            referralBonusAmount = appSettings.referralBonusAmount || referralBonusAmount;
+            signupBonusAmount = appSettings.signupBonusAmount || signupBonusAmount;
+            
+            const adminDepositNumEl = document.getElementById('admin-deposit-number');
+            if (adminDepositNumEl) adminDepositNumEl.textContent = adminDepositNumber;
+            const withdrawAmountInput = document.getElementById('withdraw-amount');
+            if (withdrawAmountInput) withdrawAmountInput.placeholder = `Enter amount min ${minWithdrawalAmount} (PKR)`;
+            const referralBonusTextEl = document.getElementById('referral-bonus-text');
+            if (referralBonusTextEl) referralBonusTextEl.textContent = referralBonusAmount;
+        }
+
+        navigateTo('homePage');
+    }
 });
