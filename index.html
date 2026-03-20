@@ -13,17 +13,17 @@
     <script src="https://www.gstatic.com/firebasejs/8.1.0/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.1.0/firebase-database.js"></script>
 
-    <style>
-        body { -webkit-tap-highlight-color: transparent; overflow-x: hidden; } 
+   <style>
+        body { -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
         .page { display: none; } .page.active { display: block; } .modal { display: none; } .modal.active { display: flex; }
         ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: #fff7ed; } ::-webkit-scrollbar-thumb { background: #dc2626; border-radius: 5px;}
         input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type=number] { -moz-appearance: textfield; }
         .text-gradient { background-clip: text; -webkit-background-clip: text; color: transparent; background-image: linear-gradient(to right, #dc2626, #fbbf24); }
-        
+
         /* Nav Animation */
         .nav-item { transition: all 0.3s ease; }
-        
+
         /* Custom styles for details/summary (accordion) */
         details.policy-accordion {
             background-color: #fff7ed; /* bg-orange-50 */
@@ -55,7 +55,7 @@
         }
         details.policy-accordion[open] summary::before {
             content: "\f056"; /* Minus icon */
-            transform: translateY(-50%); 
+            transform: translateY(-50%);
         }
         details.policy-accordion ul {
             margin-top: 0.5rem; /* mt-2 */
@@ -74,7 +74,7 @@
         </header>
 
         <main id="main-content" class="pb-24">
-            <div id="loginPage" class="page"></div> 
+            <div id="loginPage" class="page"></div>
             <div id="homePage" class="page"></div>
             <div id="myTournamentsPage" class="page"></div>
             <div id="walletPage" class="page"></div>
@@ -87,7 +87,7 @@
                 <a href="#" class="nav-item text-center text-white/60" onclick="navigateTo('myTournamentsPage')"><i class="fas fa-trophy fa-lg mb-1"></i><span class="block text-[10px] font-medium">Matches</span></a>
                 <a href="#" class="nav-item text-center text-white/60" onclick="navigateTo('walletPage')"><i class="fas fa-wallet fa-lg mb-1"></i><span class="block text-[10px] font-medium">Wallet</span></a>
                 <a href="#" class="nav-item text-center text-white/60" onclick="navigateTo('profilePage')"><i class="fas fa-user-cog fa-lg mb-1"></i><span class="block text-[10px] font-medium">Profile</span></a>
-            </div> 
+            </div>
         </nav>
     </div>
 
@@ -132,6 +132,11 @@
                 <input type="number" id="add-amount" placeholder="Enter amount (PKR)" class="w-full p-3 bg-orange-50 rounded border border-orange-200 focus:outline-none focus:border-red-500" required>
                 <input type="text" id="deposit-tid" placeholder="Enter Transaction ID (TID)" class="w-full p-3 bg-orange-50 rounded border border-orange-200 focus:outline-none focus:border-red-500" required>
                 <input type="text" id="deposit-source-type" placeholder="EasyPaisa / JazzCash (e.g., EasyPaisa)" class="w-full p-3 bg-orange-50 rounded border border-orange-200 focus:outline-none focus:border-red-500" required>
+                
+                <div class="flex items-center mt-4">
+                    <input type="checkbox" id="acceptDepositRules" class="mr-2" required>
+                    <label for="acceptDepositRules" class="text-sm text-gray-700">I accept the <a href="#" onclick="showPolicySection('deposit_rules'); toggleModal('addMoneyModal', false); return false;" class="text-blue-600 underline font-semibold">Deposit Rules</a></label>
+                </div>
 
                 <button type="submit" class="w-full text-white bg-gradient-to-r from-green-500 to-green-600 p-3 rounded font-semibold shadow-md">Confirm Deposit</button>
                 <button type="button" onclick="toggleModal('addMoneyModal', false)" class="w-full bg-gray-200 text-gray-700 p-3 rounded font-semibold">Cancel</button>
@@ -150,14 +155,20 @@
                 <input type="text" id="withdraw-owner-name" placeholder="Owner Name" class="w-full p-3 bg-orange-50 rounded border border-orange-200" required>
                 <input type="text" id="withdraw-account-type" placeholder="EasyPaisa / JazzCash (e.g., EasyPaisa)" class="w-full p-3 bg-orange-50 rounded border border-orange-200" required>
 
+                <p class="text-sm text-gray-600 mt-4">
+                    Withdrawal Rules<br><br>
+                    1️⃣ Withdrawal sirf un users ke liye available hai jo Live Tournament Match play karte hain.<br><br>
+                    ✅Withdrawal ke liye 5 referrals zaroori hain. Referral tab count hoga jab koi aapke code se signup karke 50 rupees deposit kare.
+                </p>
+
+                <div class="flex items-center mt-4">
+                    <input type="checkbox" id="acceptWithdrawalRules" class="mr-2" required>
+                    <label for="acceptWithdrawalRules" class="text-sm text-gray-700">I accept the <a href="#" onclick="showPolicySection('withdrawal_rules'); toggleModal('withdrawMoneyModal', false); return false;" class="text-blue-600 underline font-semibold">Withdrawal Rules</a></label>
+                </div>
+
                 <button type="submit" class="w-full text-white bg-gradient-to-r from-blue-500 to-blue-600 p-3 rounded font-semibold shadow-md">Request Withdrawal</button>
                 <button type="button" onclick="toggleModal('withdrawMoneyModal', false)" class="w-full bg-gray-200 text-gray-700 p-3 rounded font-semibold">Cancel</button>
             </form>
-
-            <p class="text-sm text-gray-600 mt-4">
-                Withdrawal Rules<br><br>
-                1️⃣ Withdrawal sirf un users ke liye available hai jo Live Tournament Match play karte hain.<br><br>
-            </p>
         </div>
     </div>
 
@@ -168,7 +179,7 @@
                 <i class="fas fa-times fa-lg"></i>
             </button>
             <h3 class="text-xl font-bold mb-4 text-center text-gradient">Add New Game</h3>
-            
+
             <!-- Policy Section (Changed to Accordion) -->
             <details class="policy-accordion text-sm">
                 <summary>Game Submission Policy</summary>
@@ -183,12 +194,18 @@
             <form id="addGameForm" class="space-y-4">
                 <input type="text" id="gameTitleInput" placeholder="Game Title (e.g. Ludo)" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
                 <input type="url" id="gameImageUrlInput" placeholder="Image URL (Thumbnail)" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
-                <input type="url" id="gameUrlInput" placeholder="Game URL (e.g. ludo.html)" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                <input type="url" id="gameUrlInput" placeholder="Game URL (e-g. ludo.html)" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                
+                <div class="flex items-center mt-4">
+                    <input type="checkbox" id="acceptGameSubmissionRules" class="mr-2" required>
+                    <label for="acceptGameSubmissionRules" class="text-sm text-gray-700">I accept the <a href="#" onclick="this.closest('details').open = true; return false;" class="text-blue-600 underline font-semibold">Game Submission Policy</a></label>
+                </div>
+
                 <button type="submit" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-700 hover:to-yellow-600 p-3 rounded-lg font-bold shadow-md transition-all">Add Game</button>
             </form>
         </div>
     </div>
-    
+
     <div id="toast" class="fixed top-5 right-5 text-white py-2 px-4 rounded-lg shadow-lg" style="display: none; z-index: 1000;"></div>
 
     <!-- NEW MODAL: Contact Us -->
@@ -208,6 +225,7 @@
     </div>
 
     <!-- Link to the separate script.js file -->
-    <script src="script.js"></script>
+   <script src="script.js"></script>
+
 </body>
 </html>
