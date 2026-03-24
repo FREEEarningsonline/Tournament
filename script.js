@@ -1,3 +1,4 @@
+// Firebase Configuration (DO NOT modify these values directly if they are sensitive)
 const firebaseConfig = {
     apiKey: "AIzaSyDR2OugzoVNnKN6OUKsPxC9ajldlhanteE",
     authDomain: "tournament-af6dd.firebaseapp.com",
@@ -8,38 +9,64 @@ const firebaseConfig = {
     measurementId: "G-GK0JNQ44N7"
 };
 
+// Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.database();
 
+// Global variables
 let currentUserData = null;
-let pendingAction = null; // Global to store action after login
+let pendingAction = null; // To store action after login
+let unreadNotificationsCount = 0; // Global counter for unread notifications
 
-// Dynamic app settings (will be loaded from Firebase)
+// Dynamic app settings (will be loaded from Firebase, with defaults)
 let adminDepositNumber = '03105784772';
 let minWithdrawalAmount = 120;
 let referralBonusAmount = 25;
 let signupBonusAmount = 80;
 
 
+/**
+ * Navigates to a specified page and updates the navigation bar.
+ * @param {string} pageId - The ID of the page to navigate to.
+ */
 function navigateTo(pageId) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.getElementById(pageId)?.classList.add('active');
-    loadPageContent(pageId);
+    loadPageContent(pageId); // Load content for the new active page
 
     document.querySelectorAll('.nav-item').forEach(item => {
         const isActive = item.getAttribute('onclick').includes(pageId);
         item.className = 'nav-item text-center transition-all duration-300';
+
+        // Check if the current nav-item is the notification button
+        const isNotificationNav = item.querySelector('.fa-bell');
 
         if (isActive) {
             item.classList.add('text-white', 'scale-125', '-translate-y-1', 'font-bold', 'drop-shadow-md');
         } else {
             item.classList.add('text-white/60', 'scale-100');
         }
+
+        // Keep notification badge visible regardless of active state if unread count > 0
+        const notificationBadge = document.getElementById('unread-notifications-count');
+        if (isNotificationNav && notificationBadge) {
+            if (unreadNotificationsCount > 0) {
+                notificationBadge.style.display = 'block';
+                notificationBadge.textContent = unreadNotificationsCount;
+            } else {
+                notificationBadge.style.display = 'none';
+            }
+        }
     });
-    window.scrollTo(0, 0);
+    window.scrollTo(0, 0); // Scroll to top of the new page
 }
 
+/**
+ * Displays a toast message.
+ * @param {string} message - The message to display.
+ * @param {boolean} [isError=false] - Whether the message is an error.
+ */
 function showToast(message, isError = false) {
     const toast = document.getElementById('toast');
     toast.textContent = message;
@@ -48,12 +75,31 @@ function showToast(message, isError = false) {
     setTimeout(() => { toast.style.display = 'none'; }, 3000);
 }
 
+/**
+ * Formats a number as a Pakistani Rupee currency string.
+ * @param {number} amount - The amount to format.
+ * @returns {string} The formatted currency string.
+ */
 function formatCurrency(amount) {
     return `PKR ${new Intl.NumberFormat('en-PK', { minimumFractionDigits: 0 }).format(amount)}`;
 }
 
-function toggleModal(modalId, show) { document.getElementById(modalId).classList.toggle('active', show); }
+/**
+ * Toggles the visibility of a modal.
+ * @param {string} modalId - The ID of the modal to toggle.
+ * @param {boolean} show - True to show, false to hide.
+ */
+function toggleModal(modalId, show) {
+    document.getElementById(modalId).classList.toggle('active', show);
+}
 
+/**
+ * Checks if the user is logged in before proceeding with an action.
+ * If not logged in, opens the auth modal and queues the action.
+ * @param {Event} event - The DOM event that triggered the action.
+ * @param {string} actionType - The type of action to perform ('playGameUrl' or 'joinTournament').
+ * @param {...any} args - Arguments to pass to the action function.
+ */
 function checkLoginAndAct(event, actionType, ...args) {
     event.preventDefault();
 
@@ -70,6 +116,10 @@ function checkLoginAndAct(event, actionType, ...args) {
     }
 }
 
+/**
+ * Firebase Authentication state change listener.
+ * Manages UI visibility and user data loading upon login/logout.
+ */
 auth.onAuthStateChanged(async user => {
     const showAppControls = user ? true : false;
     document.getElementById('app-header').style.display = showAppControls ? 'flex' : 'none';
@@ -103,7 +153,6 @@ auth.onAuthStateChanged(async user => {
                 console.log("DEBUG (onAuthStateChanged): Fetched existing user data:", currentUserData);
             } else {
                 // If it's a brand new user and no data is in DB yet, initialize with signup bonus.
-                // The signup form will later *confirm* this by writing to DB.
                 console.log(`DEBUG (onAuthStateChanged): No existing data for user ${user.uid}. Initializing with signup defaults.`);
                 currentUserData = {
                     uid: user.uid,
@@ -118,18 +167,15 @@ auth.onAuthStateChanged(async user => {
             }
 
             // After initial `currentUserData` is set (either from DB or with signup defaults),
-            // set up the *real-time* listener. This will keep `currentUserData` up-to-date.
+            // set up the *real-time* listener for user data AND notifications.
             db.ref('users/' + user.uid).on('value', snap => {
                 const updatedDataFromListener = snap.val();
                 if (updatedDataFromListener) {
                     currentUserData = { uid: user.uid, ...updatedDataFromListener };
                     console.log("DEBUG (Real-time listener): Updated currentUserData:", currentUserData);
                 } else {
-                    // This is the CRITICAL change: If the listener gets a null snapshot,
-                    // we *do not* overwrite currentUserData with a new default 0.
-                    // We let currentUserData retain its current (likely correct) state.
                     console.warn(`DEBUG (Real-time listener): Received null data for ${user.uid}. Ignoring to prevent overwrite.`);
-                    return; // ❌ overwrite band
+                    return; 
                 }
 
                 // --- UI UPDATES (Always reflect current `currentUserData`) ---
@@ -156,8 +202,57 @@ auth.onAuthStateChanged(async user => {
                 }
             });
 
+            // NEW: Real-time listener for unread notifications count
+            db.ref(`notifications/${user.uid}`).orderByChild('status').equalTo('unread').on('value', snapshot => {
+                unreadNotificationsCount = snapshot.numChildren();
+                const notificationBadge = document.getElementById('unread-notifications-count');
+                if (notificationBadge) {
+                    if (unreadNotificationsCount > 0) {
+                        notificationBadge.textContent = unreadNotificationsCount;
+                        notificationBadge.style.display = 'block';
+                    } else {
+                        notificationBadge.style.display = 'none';
+                    }
+                }
+                // If on notifications page, re-render to update highlights/counts
+                if (document.getElementById('notificationsPage').classList.contains('active')) {
+                    renderNotificationsPage(document.getElementById('notificationsPage'));
+                }
+            });
+
+
             // The code below should now run *after* the initial `currentUserData` is set.
             // If it's a new signup, the `signupForm` handler will write data, and *then* this listener will pick it up.
+
+            // Re-added: Game play reward logic for standalone games
+            if (localStorage.getItem('game_played_pending') === 'true') {
+                localStorage.removeItem('game_played_pending'); // Clear the flag immediately
+                console.log("DEBUG: game_played_pending detected. Attempting to add 1 PKR.");
+                const walletRef = db.ref(`users/${user.uid}/wallet_balance`);
+                walletRef.transaction((currentBalance) => {
+                    // Ensure currentBalance is a number and non-null/undefined
+                    const balance = currentBalance !== null && typeof currentBalance === 'number' ? currentBalance : 0;
+                    console.log(`DEBUG: Current balance before transaction for game play: ${balance}`);
+                    return balance + 1; // Add 1 PKR
+                }, (error, committed, snapshot) => {
+                    if (error) {
+                        console.error('Transaction for Game Play Reward failed', error);
+                        showToast('Failed to add game play reward.', true);
+                    } else if (committed) {
+                        console.log(`DEBUG: Game Play Reward transaction committed. New balance: ${snapshot.val()}`);
+                        db.ref(`transactions/${user.uid}`).push({
+                            amount: 1,
+                            type: 'credit',
+                            description: 'Game Play Reward',
+                            created_at: new Date().toISOString()
+                        });
+                        showToast('🎉 You earned PKR 1 for playing!');
+                    } else {
+                        // Transaction aborted by Firebase (e.g., another client wrote to the path)
+                        console.log('DEBUG: Game Play Reward transaction aborted (not committed).');
+                    }
+                });
+            }
 
             const activeTid = localStorage.getItem('active_tournament_id');
             if (activeTid) {
@@ -187,6 +282,9 @@ auth.onAuthStateChanged(async user => {
                 }
             }
 
+            // NEW: Check for game deletion notifications upon login/app load
+            checkAndDisplayGameDeletionNotifications(user.uid);
+
             const initialPageId = document.querySelector('.page.active')?.id || 'homePage';
             navigateTo(initialPageId);
 
@@ -200,10 +298,56 @@ auth.onAuthStateChanged(async user => {
         // Clear global currentUserData and update UI for logged-out state
         currentUserData = null;
         document.getElementById('header-wallet-balance').textContent = `PKR...`;
+        
+        // Hide notification badge when logged out
+        const notificationBadge = document.getElementById('unread-notifications-count');
+        if (notificationBadge) {
+            notificationBadge.style.display = 'none';
+            unreadNotificationsCount = 0;
+        }
+
         navigateTo('homePage'); // Redirect to home or login page
     }
 });
 
+/**
+ * Checks for and displays any unread game deletion notifications as a persistent modal popup.
+ * Marks the displayed notification as read.
+ * @param {string} userId - The current user's UID.
+ */
+async function checkAndDisplayGameDeletionNotifications(userId) {
+    if (!userId) return;
+
+    const notificationsRef = db.ref(`notifications/${userId}`);
+    const snapshot = await notificationsRef.orderByChild('status').equalTo('unread').once('value');
+    const notifications = snapshot.val();
+
+    if (notifications) {
+        for (const notificationId in notifications) {
+            const notification = notifications[notificationId];
+            if (notification.type === 'game_deletion') {
+                document.getElementById('deletion-notification-title').textContent = notification.message.split('. Reason:')[0] || 'Your game has been deleted.';
+                document.getElementById('deletion-notification-message').innerHTML = notification.message.includes('. Reason:') 
+                    ? `<strong>Reason:</strong> ${notification.message.split('. Reason:')[1]}`
+                    : 'No specific reason was provided by the admin.';
+                
+                toggleModal('gameDeletionNotificationModal', true);
+                
+                // Mark as read in Firebase
+                await notificationsRef.child(notificationId).update({ status: 'read', read_at: new Date().toISOString() });
+                
+                // Only show one deletion notification at a time, then break
+                break; 
+            }
+        }
+    }
+}
+
+
+/**
+ * Loads content into the main content area based on the pageId.
+ * @param {string} pageId - The ID of the page to load content for.
+ */
 function loadPageContent(pageId) {
     const pageContainer = document.getElementById(pageId);
     if (!pageContainer) return;
@@ -213,47 +357,170 @@ function loadPageContent(pageId) {
         case 'myTournamentsPage': renderMyTournamentsPage(pageContainer); break;
         case 'walletPage': renderWalletPage(pageContainer); break;
         case 'profilePage': renderProfilePage(pageContainer); break;
+        case 'notificationsPage': renderNotificationsPage(pageContainer); break; // Render Notifications Page
     }
 }
 
+/**
+ * Helper function to safely escape strings for JavaScript in HTML attribute context.
+ * Prevents issues with quotes or special characters breaking JS parsing.
+ * @param {string} s - The string to escape.
+ * @returns {string} The escaped string.
+ */
+function escapeJsStringForHtmlAttribute(s) {
+    const str = String(s || '');
+    return str.replace(/\\/g, '\\\\')
+              .replace(/'/g, '\\\'')
+              .replace(/"/g, '&quot;')
+              .replace(/\n/g, '\\n')
+              .replace(/\r/g, '\\r');
+}
+
+
+/**
+ * Renders the Home Page content dynamically.
+ * @param {HTMLElement} container - The container element for the home page.
+ */
 async function renderHomePage(container) {
     container.innerHTML = `
-                <div class="p-4 bg-orange-50 min-h-screen">
-                    <h2 class="text-2xl font-black mb-4 text-gray-800">Play Games <span class="text-xs font-normal bg-green-100 text-green-700 px-2 py-1 rounded ml-2">Earn PKR 1/play</span></h2>
-                    <div id="games-grid" class="grid grid-cols-2 gap-4 mb-8">
-                        <div class="col-span-2 text-center py-10"><i class="fas fa-spinner fa-spin fa-2x text-red-500"></i></div>
-                    </div>
+        <div class="p-4 bg-orange-50 min-h-screen">
+            <h2 class="text-2xl font-black mb-4 text-gray-800">Play Games <span class="text-xs font-normal bg-green-100 text-green-700 px-2 py-1 rounded ml-2">Earn PKR 1/play</span></h2>
+            
+            <div id="games-by-category-container" class="grid grid-cols-2 gap-4 mb-8"> <!-- Main grid for games -->
+                <div class="col-span-2 text-center py-10"><i class="fas fa-spinner fa-spin fa-2x text-red-500"></i><p class="mt-2 text-gray-400">Loading games...</p></div>
+            </div>
 
-                    <h2 class="text-xl font-bold mb-4 text-gray-700 mt-6 border-t border-orange-200 pt-4">Live & Upcoming Tournaments</h2>
-                    <div id="tournament-list" class="space-y-4"></div>
-                </div>`;
+            <!-- NEW: Live Event/Game Section -->
+            <div id="live-event-section" class="mb-8">
+                <h2 class="text-xl font-bold mb-4 text-gray-700 mt-6 border-t border-orange-200 pt-4">Live Event / Game</h2>
+                <div id="live-event-content" class="bg-white p-4 rounded-xl shadow-md border border-red-100">
+                    <p class="text-center text-gray-500 italic">Loading live event info...</p>
+                </div>
+            </div>
 
+            <!-- NEW: Video Content Sections -->
+            <div id="video-content-sections" class="mb-8">
+                <h2 class="text-xl font-bold mb-4 text-gray-700 mt-6 border-t border-orange-200 pt-4">Video Content</h2>
+                <div id="video-sections-list-home" class="space-y-3">
+                    <p class="text-center text-gray-500 italic">Loading video sections...</p>
+                </div>
+            </div>
+
+            <h2 class="text-xl font-bold mb-4 text-gray-700 mt-6 border-t border-orange-200 pt-4">Live & Upcoming Tournaments</h2>
+            <div id="tournament-list" class="space-y-4"></div>
+        </div>`;
+
+    const gamesByCategoryContainer = document.getElementById('games-by-category-container');
+
+    // Listener for games data (real-time updates)
     db.ref('games').on('value', snapshot => {
-        const games = snapshot.val();
-        const gridEl = document.getElementById('games-grid');
-        if (!gridEl) return;
+        const gamesData = snapshot.val();
+        if (!gamesByCategoryContainer) return;
 
-        if (!games) {
-            gridEl.innerHTML = `<div class="col-span-2 text-center text-gray-500">No games available yet.</div>`;
+        if (!gamesData) {
+            gamesByCategoryContainer.innerHTML = `<div class="col-span-2 text-center text-gray-500">No games available yet.</div>`;
             return;
         }
 
-        gridEl.innerHTML = Object.entries(games).map(([id, game]) => `
+        const groupedGames = {};
+        Object.entries(gamesData).forEach(([id, game]) => {
+            // Use 'Uncategorized' if game.category is missing or empty
+            const category = (game.category && String(game.category).trim()) ? String(game.category).trim() : 'Uncategorized';
+            if (!groupedGames[category]) {
+                groupedGames[category] = [];
+            }
+            groupedGames[category].push({ id, ...game });
+        });
+
+        let gamesHtml = '';
+        // Sort categories alphabetically, put 'Uncategorized' last if it exists
+        const sortedCategories = Object.keys(groupedGames).sort((a, b) => {
+            if (a === 'Uncategorized') return 1;
+            if (b === 'Uncategorized') return -1;
+            return a.localeCompare(b);
+        });
+
+        sortedCategories.forEach(category => {
+            // Add category heading as a spanning item in the grid
+            gamesHtml += `<h3 class="col-span-2 text-xl font-bold mt-6 mb-3 text-gray-700">${escapeJsStringForHtmlAttribute(category)}</h3>`;
+            
+            // Add game cards for this category
+            groupedGames[category].sort((a, b) => a.title.localeCompare(b.title)).forEach(game => {
+                gamesHtml += `
                     <div class="bg-white rounded-xl shadow-lg overflow-hidden border border-orange-100 transform transition duration-300 hover:scale-105">
                         <div class="h-32 bg-gray-200 relative">
-                            <img src="${game.image_url || 'https://via.placeholder.com/300x200?text=Game'}" class="w-full h-full object-cover">
+                            <img src="${escapeJsStringForHtmlAttribute(game.image_url || 'https://via.placeholder.com/300x200?text=Game')}" class="w-full h-full object-cover">
                             <div class="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/70 to-transparent p-2">
-                                <h3 class="text-white font-bold text-sm shadow-black drop-shadow-md">${game.title}</h3>
+                                <h3 class="text-white font-bold text-sm shadow-black drop-shadow-md">${escapeJsStringForHtmlAttribute(game.title)}</h3>
                             </div>
                         </div>
                         <div class="p-3">
-                            <button onclick="checkLoginAndAct(event, 'playGameUrl', '${game.game_url}')" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-700 hover:to-yellow-600 py-2 rounded-lg font-bold text-sm shadow-md">
+                            <button onclick="checkLoginAndAct(event, 'playGameUrl', '${escapeJsStringForHtmlAttribute(game.game_url)}')" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-700 hover:to-yellow-600 py-2 rounded-lg font-bold text-sm shadow-md">
                                 <i class="fas fa-play mr-1"></i> PLAY NOW
                             </button>
                         </div>
                     </div>
-                `).join('');
+                `;
+            });
+        });
+        gamesByCategoryContainer.innerHTML = gamesHtml; // Replace spinner with actual content
     });
+
+    // NEW: Load Live Game Info
+    const liveEventContentEl = document.getElementById('live-event-content');
+    db.ref('live_game').on('value', snap => {
+        const liveGameData = snap.val();
+        if (liveGameData && liveGameData.status !== 'inactive' && (liveGameData.title || liveGameData.url)) {
+            let statusText = '';
+            let actionButton = '';
+            if (liveGameData.status === 'live') {
+                statusText = '<span class="bg-red-500 text-white px-2 py-1 rounded-full text-xs font-semibold animate-pulse">LIVE NOW</span>';
+                actionButton = `<a href="${escapeJsStringForHtmlAttribute(liveGameData.url)}" target="_blank" rel="noopener noreferrer" class="mt-3 inline-block bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-green-600 transition">Watch Live <i class="fas fa-play-circle ml-1"></i></a>`;
+            } else if (liveGameData.status === 'upcoming') {
+                statusText = '<span class="bg-blue-500 text-white px-2 py-1 rounded-full text-xs font-semibold">UPCOMING</span>';
+                if (liveGameData.url) {
+                    actionButton = `<a href="${escapeJsStringForHtmlAttribute(liveGameData.url)}" target="_blank" rel="noopener noreferrer" class="mt-3 inline-block bg-blue-500 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-blue-600 transition">View Details <i class="fas fa-info-circle ml-1"></i></a>`;
+                }
+            }
+            liveEventContentEl.innerHTML = `
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="font-bold text-lg text-gray-800">${escapeJsStringForHtmlAttribute(liveGameData.title || 'Live Event')}</h3>
+                    ${statusText}
+                </div>
+                <p class="text-sm text-gray-600">${escapeJsStringForHtmlAttribute(liveGameData.description || 'No description available.')}</p>
+                ${actionButton}
+            `;
+        } else {
+            liveEventContentEl.innerHTML = `<p class="text-center text-gray-500 italic py-4">No live or upcoming event information available.</p>`;
+        }
+    });
+
+    // NEW: Load Video Content Sections
+    const videoSectionsListHomeEl = document.getElementById('video-sections-list-home');
+    db.ref('video_sections').on('value', snap => {
+        const sections = snap.val();
+        if (!sections) {
+            videoSectionsListHomeEl.innerHTML = `<p class="text-center text-gray-500 italic py-4">No video content sections available yet.</p>`;
+            return;
+        }
+        let sectionsHtml = '';
+        const sectionsArray = Object.entries(sections).map(([id, section]) => ({id, ...section}));
+        sectionsArray.sort((a, b) => a.title.localeCompare(b.title)); // Sort alphabetically
+
+        sectionsArray.forEach(section => {
+            sectionsHtml += `
+                <div class="bg-white p-3 rounded-xl shadow-sm border border-green-100 flex items-center justify-between cursor-pointer hover:bg-green-50 transition-colors">
+                    <div>
+                        <h4 class="font-bold text-gray-800">${escapeJsStringForHtmlAttribute(section.title)}</h4>
+                        <p class="text-sm text-gray-600">${escapeJsStringForHtmlAttribute(section.description || 'No description')}</p>
+                    </div>
+                    <i class="fas fa-chevron-right text-gray-400"></i>
+                </div>
+            `;
+        });
+        videoSectionsListHomeEl.innerHTML = sectionsHtml;
+    });
+
 
     const listEl = document.getElementById('tournament-list');
     listEl.innerHTML = `<div class="text-center py-10"><i class="fas fa-spinner fa-spin fa-2x text-red-500"></i></div>`;
@@ -265,12 +532,12 @@ async function renderHomePage(container) {
         listEl.innerHTML = Object.entries(tournaments).map(([id, t]) => {
             const isUserLoggedIn = auth.currentUser;
             const buttonText = isUserLoggedIn ? 'Join Match' : 'Login to Join';
-            const buttonAction = isUserLoggedIn ? `joinTournament(event, '${id}', ${t.entry_fee})` : `checkLoginAndAct(event, 'joinTournament', '${id}', ${t.entry_fee})`;
+            const buttonAction = isUserLoggedIn ? `joinTournament(event, '${escapeJsStringForHtmlAttribute(id)}', ${t.entry_fee})` : `checkLoginAndAct(event, 'joinTournament', '${escapeJsStringForHtmlAttribute(id)}', ${t.entry_fee})`;
 
             return `
                         <div class="bg-gradient-to-br from-red-50 to-yellow-50 rounded-xl shadow-md border border-red-100 overflow-hidden">
                             <div class="p-4 flex justify-between items-start border-b border-red-100/50">
-                                <div><h3 class="font-bold text-lg text-red-900">${t.title}</h3><span class="text-xs font-bold text-white bg-gradient-to-r from-red-500 to-orange-500 px-3 py-1 rounded-full shadow-sm">${formatCurrency(t.prize_pool)} Pool</span>
+                                <div><h3 class="font-bold text-lg text-red-900">${escapeJsStringForHtmlAttribute(t.title)}</h3><span class="text-xs font-bold text-white bg-gradient-to-r from-red-500 to-orange-500 px-3 py-1 rounded-full shadow-sm">${formatCurrency(t.prize_pool)} Pool</span>
                             </div>
                             <div class="p-4 grid grid-cols-2 gap-4 text-sm">
                                 <div class="bg-white/60 p-2 rounded border border-red-100"><p class="text-gray-500 text-xs">Entry Fee</p><p class="font-bold text-gray-800">${formatCurrency(t.entry_fee)}</p></div>
@@ -284,6 +551,11 @@ async function renderHomePage(container) {
     }
 }
 
+/**
+ * Initiates playing a game URL, optionally as part of a tournament.
+ * @param {string} url - The URL of the game.
+ * @param {string} [tournamentId=null] - The ID of the tournament, if applicable.
+ */
 function playGameUrl(url, tournamentId = null) {
     if (!auth.currentUser) {
         return showToast('Login required to play!', true);
@@ -293,11 +565,17 @@ function playGameUrl(url, tournamentId = null) {
     if (tournamentId) {
         localStorage.setItem('active_tournament_id', tournamentId);
         localStorage.setItem('game_start_time', Date.now());
-    } 
+    } else { // Set flag for non-tournament game play reward
+        localStorage.setItem('game_played_pending', 'true');
+    }
     window.location.href = url;
 }
 
-function renderWalletPage(container) {
+/**
+ * Renders the Wallet Page content dynamically.
+ * @param {HTMLElement} container - The container element for the wallet page.
+ */
+async function renderWalletPage(container) {
     // Check for auth.currentUser, not currentUserData, for initial login state
     if (!auth.currentUser) {
         container.innerHTML = `
@@ -465,6 +743,10 @@ function renderWalletPage(container) {
         });
 }
 
+/**
+ * Renders the My Tournaments Page content dynamically.
+ * @param {HTMLElement} container - The container element for the My Tournaments page.
+ */
 async function renderMyTournamentsPage(container) {
     if (!auth.currentUser) {
         container.innerHTML = `
@@ -495,17 +777,17 @@ async function renderMyTournamentsPage(container) {
             if (t.status !== 'Completed') {
                 hasUpcoming = true;
                 upcomingHtml += `<div class="bg-white border-l-4 border-red-500 rounded-lg p-4 shadow-md">
-                            <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg text-gray-800">${t.title}</h3><span class="text-xs font-bold ${t.status === 'Live' ? 'text-white bg-red-600 animate-pulse' : 'text-yellow-800 bg-yellow-200'} px-2 py-1 rounded-full">${t.status}</span></div>
-                            <p class="text-sm text-gray-500 mb-2">${t.game_name}</p>
+                            <div class="flex justify-between items-center mb-2"><h3 class="font-bold text-lg text-gray-800">${escapeJsStringForHtmlAttribute(t.title)}</h3><span class="text-xs font-bold ${t.status === 'Live' ? 'text-white bg-red-600 animate-pulse' : 'text-yellow-800 bg-yellow-200'} px-2 py-1 rounded-full">${t.status}</span></div>
+                            <p class="text-sm text-gray-500 mb-2">${escapeJsStringForHtmlAttribute(t.game_name)}</p>
                             ${t.status === 'Live' ? `
-                                ${t.room_id ? `<div class="bg-gray-100 p-3 rounded text-sm mb-3"><p><span class="font-bold text-gray-600">Room ID:</span> ${t.room_id}</p><p><span class="font-bold text-gray-600">Pass:</span> ${t.room_password}</p></div>` : ''}
-                                <button onclick="checkLoginAndAct(event, 'playGameUrl', '${t.game_url}', '${tId}')" class="w-full text-white bg-gradient-to-r from-green-500 to-green-600 font-bold py-3 rounded-lg shadow-lg hover:shadow-xl transition transform active:scale-95 animate-pulse">PLAY LIVE MATCH</button>
+                                ${t.room_id ? `<div class="bg-gray-100 p-3 rounded text-sm mb-3"><p><span class="font-bold text-gray-600">Room ID:</span> ${escapeJsStringForHtmlAttribute(t.room_id)}</p><p><span class="font-bold text-gray-600">Pass:</span> ${escapeJsStringForHtmlAttribute(t.room_password)}</p></div>` : ''}
+                                <button onclick="checkLoginAndAct(event, 'playGameUrl', '${escapeJsStringForHtmlAttribute(t.game_url)}', '${escapeJsStringForHtmlAttribute(tId)}')" class="w-full text-white bg-gradient-to-r from-green-500 to-green-600 font-bold py-3 rounded-lg shadow-lg hover:shadow-xl transition transform active:scale-95 animate-pulse">PLAY LIVE MATCH</button>
                             ` : `<p class="text-xs text-gray-400 italic mb-3">Room details appear here when Live.</p>`}
                         </div>`;
             } else {
                 hasCompleted = true;
                 completedHtml += `<div class="bg-gray-100 border border-gray-200 rounded-lg p-4 flex justify-between items-center shadow-sm opacity-80">
-                            <div><h3 class="font-bold text-gray-700">${t.title}</h3><p class="text-xs text-gray-500">${new Date(t.match_time).toLocaleDateString()}</p></div>
+                            <div><h3 class="font-bold text-gray-700">${escapeJsStringForHtmlAttribute(t.title)}</h3><p class="text-xs text-gray-500">${new Date(t.match_time).toLocaleDateString()}</p></div>
                             <span class="font-bold ${participant.status === 'Winner' ? 'text-green-600' : 'text-gray-500'}">${participant.status || 'Played'}</span>
                         </div>`;
             }
@@ -515,7 +797,137 @@ async function renderMyTournamentsPage(container) {
     document.getElementById('completedContent').innerHTML = hasCompleted ? completedHtml : `<p class="text-center text-gray-500 py-8">No history available.</p>`;
 }
 
-async function renderProfilePage(container) {
+/**
+ * Renders the Notifications Page content dynamically.
+ * @param {HTMLElement} container - The container element for the notifications page.
+ */
+async function renderNotificationsPage(container) {
+    if (!auth.currentUser) {
+        container.innerHTML = `
+            <div class="p-4 bg-orange-50 min-h-screen flex flex-col items-center justify-center text-center">
+                <i class="fas fa-bell fa-5x text-gray-400 mb-6"></i>
+                <p class="text-xl text-gray-700 font-semibold mb-4">Login to view your notifications.</p>
+                <button onclick="toggleModal('authModal', true)" class="text-white bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-700 hover:to-yellow-600 p-3 rounded-lg font-bold shadow-md transition-all">
+                    Login / Sign Up
+                </button>
+            </div>`;
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="p-4 bg-orange-50 min-h-screen">
+            <h2 class="text-2xl font-black mb-4 text-gray-800">Your Notifications</h2>
+            <div class="flex justify-end mb-4">
+                <button onclick="markAllNotificationsAsRead()" class="bg-blue-500 text-white px-3 py-1 rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors">
+                    Mark All as Read
+                </button>
+            </div>
+            <div id="notifications-list" class="space-y-3 pb-20">
+                <p class="text-center text-gray-400 italic">Loading notifications...</p>
+            </div>
+        </div>`;
+
+    const listEl = document.getElementById('notifications-list');
+    const userId = auth.currentUser.uid;
+
+    // Listen for real-time updates to notifications
+    db.ref(`notifications/${userId}`).orderByChild('timestamp').on('value', snapshot => {
+        const notificationsData = snapshot.val();
+        if (!notificationsData) {
+            listEl.innerHTML = `<p class="text-center text-gray-400 italic">No notifications yet.</p>`;
+            return;
+        }
+
+        const notificationsArray = [];
+        for (const id in notificationsData) {
+            notificationsArray.push({ id, ...notificationsData[id] });
+        }
+
+        // Sort by timestamp (latest first)
+        notificationsArray.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+        listEl.innerHTML = notificationsArray.map(notif => {
+            const isUnread = notif.status === 'unread';
+            const itemClass = isUnread ? 'notification-item unread' : 'notification-item';
+            const timeAgo = formatTimeAgo(notif.timestamp);
+
+            return `
+                <div class="${itemClass} p-4 rounded-xl shadow-sm border border-orange-100 cursor-pointer" onclick="markNotificationAsRead('${escapeJsStringForHtmlAttribute(notif.id)}')">
+                    <h3 class="font-bold text-gray-800">${escapeJsStringForHtmlAttribute(notif.title || 'Notification')}</h3>
+                    <p class="text-sm text-gray-600 mt-1">${escapeJsStringForHtmlAttribute(notif.message)}</p>
+                    <p class="text-xs text-gray-500 mt-2">${timeAgo}</p>
+                </div>
+            `;
+        }).join('');
+    });
+}
+
+/**
+ * Formats a timestamp into a human-readable "time ago" string.
+ * @param {string} timestamp - The ISO string timestamp.
+ * @returns {string} The formatted time ago string.
+ */
+function formatTimeAgo(timestamp) {
+    const now = new Date();
+    const past = new Date(timestamp);
+    const diffSeconds = Math.round((now.getTime() - past.getTime()) / 1000);
+
+    const minutes = Math.round(diffSeconds / 60);
+    const hours = Math.round(diffSeconds / 3600);
+    const days = Math.round(diffSeconds / (3600 * 24));
+
+    if (diffSeconds < 60) return `${diffSeconds} sec ago`;
+    if (minutes < 60) return `${minutes} min ago`;
+    if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    return `${days} day${days > 1 ? 's' : ''} ago`;
+}
+
+
+/**
+ * Marks a single notification as read in Firebase.
+ * @param {string} notificationId - The ID of the notification to mark as read.
+ */
+async function markNotificationAsRead(notificationId) {
+    if (!auth.currentUser || !notificationId) return;
+    try {
+        await db.ref(`notifications/${auth.currentUser.uid}/${notificationId}`).update({ status: 'read', read_at: new Date().toISOString() });
+        // UI will update automatically due to real-time listener
+    } catch (error) {
+        console.error("Error marking notification as read:", error);
+        showToast('Failed to mark notification as read.', true);
+    }
+}
+
+/**
+ * Marks all unread notifications for the current user as read.
+ */
+async function markAllNotificationsAsRead() {
+    if (!auth.currentUser) return;
+    try {
+        const unreadSnap = await db.ref(`notifications/${auth.currentUser.uid}`).orderByChild('status').equalTo('unread').once('value');
+        const updates = {};
+        unreadSnap.forEach(childSnap => {
+            updates[`notifications/${auth.currentUser.uid}/${childSnap.key}/status`] = 'read';
+            updates[`notifications/${auth.currentUser.uid}/${childSnap.key}/read_at`] = new Date().toISOString();
+        });
+        if (Object.keys(updates).length > 0) {
+            await db.ref().update(updates);
+            showToast('All notifications marked as read!');
+        } else {
+            showToast('No unread notifications to mark.', false);
+        }
+    } catch (error) {
+        console.error("Error marking all notifications as read:", error);
+        showToast('Failed to mark all notifications as read.', true);
+    }
+}
+
+
+/**
+ * Renders the Profile Page content dynamically.
+ * @param {HTMLElement} container - The container element for the profile page.
+ */
+function renderProfilePage(container) {
     if (!auth.currentUser) {
         container.innerHTML = `
                     <div class="p-4 bg-orange-50 min-h-screen flex flex-col items-center justify-center text-center">
@@ -542,19 +954,19 @@ async function renderProfilePage(container) {
                             <div class="w-20 h-20 bg-gradient-to-br from-red-500 to-yellow-500 rounded-full mx-auto flex items-center justify-center text-3xl text-white font-bold mb-3">
                                 ${currentUserData?.username ? currentUserData.username[0].toUpperCase() : 'U'}
                             </div>
-                            <p class="text-xl font-bold text-gray-800">${currentUserData?.username || 'User'}</p>
-                            <p class="text-sm text-gray-500">${currentUserData?.email || auth.currentUser?.email || 'N/A'}</p>
+                            <p class="text-xl font-bold text-gray-800">${escapeJsStringForHtmlAttribute(currentUserData?.username || 'User')}</p>
+                            <p class="text-sm text-gray-500">${escapeJsStringForHtmlAttribute(currentUserData?.email || auth.currentUser?.email || 'N/A')}</p>
                             <div class="mt-4 pt-4 border-t border-orange-100">
                                 <p class="text-md font-semibold text-gray-700">Referrals Joined: <span class="font-bold text-green-600" id="profile-referrals-count">${referralsEarned}</span></p>
                             </div>
                         </div>
 
-                        <!-- Referral Code Section -->
+                        <!-- Referral Code Section (Updated) -->
                         <div class="bg-white border border-orange-100 p-6 rounded-xl shadow-md space-y-4">
                             <h3 class="font-bold text-lg text-gray-800">Invite Friends & Earn!</h3>
                             <p class="text-sm text-gray-600">Share your username as referral code. You get <span class="font-bold text-green-600">PKR <span id="referral-bonus-text">${referralBonusAmount}</span></span> for every friend who signs up!</p>
                             <div class="flex items-center space-x-2">
-                                <input type="text" id="referralLinkInput" value="${userReferralCode}" readonly class="flex-1 p-2 bg-gray-100 rounded border border-gray-200 text-sm overflow-hidden text-ellipsis">
+                                <input type="text" id="referralLinkInput" value="${escapeJsStringForHtmlAttribute(userReferralCode)}" readonly class="flex-1 p-2 bg-gray-100 rounded border border-gray-200 text-sm overflow-hidden text-ellipsis">
                                 <button onclick="copyReferralLink()" class="bg-blue-500 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-blue-600 transition">Copy Code</button>
                             </div>
                             <p class="text-xs text-gray-500 italic mt-2">Friends must enter your username during signup to count as your referral.</p>
@@ -579,14 +991,6 @@ async function renderProfilePage(container) {
                             Withdrawal requires <strong>10 referrals</strong> who each deposited <strong>PKR 100</strong>.
                         </p>
                         
-                        <!-- Direct link buttons for Deposit and Withdrawal Rules -->
-                        <button onclick="showPolicySection('deposit_rules')" class="w-full bg-white text-gray-700 border border-gray-300 p-3 rounded-xl font-bold shadow-sm flex items-center justify-between transition transform hover:scale-105 active:scale-95">
-                            <span><i class="fas fa-money-bill-wave mr-3 text-orange-500"></i>View Deposit Rules</span> <i class="fas fa-chevron-right text-gray-400"></i>
-                        </button>
-                        <button onclick="showPolicySection('withdrawal_rules')" class="w-full bg-white text-gray-700 border border-gray-300 p-3 rounded-xl font-bold shadow-sm flex items-center justify-between transition transform hover:scale-105 active:scale-95">
-                            <span><i class="fas fa-cash-register mr-3 text-teal-500"></i>View Withdrawal Rules</span> <i class="fas fa-chevron-right text-gray-400"></i>
-                        </button>
-
                         <!-- Add New Game Button -->
                         <button onclick="toggleModal('addGameModal', true)" class="w-full bg-gradient-to-r from-orange-500 to-yellow-500 text-white p-3 rounded-xl font-bold shadow-md hover:from-orange-600 hover:to-yellow-600 transition">
                             <i class="fas fa-plus-circle mr-2"></i> Add New Game
@@ -595,7 +999,7 @@ async function renderProfilePage(container) {
                         <!-- Reset Password Button -->
                         <button onclick="changePassword()" class="w-full bg-white text-gray-700 border border-gray-300 p-3 rounded-xl font-bold shadow-sm">Reset Password</button>
 
-                        <!-- Policies & Contact -->
+                        <!-- NEW MENU for Policies & Contact -->
                         <div id="policyMenuButtons" class="space-y-4 pt-4 border-t border-orange-100">
                             <button class="w-full bg-white text-gray-700 border border-gray-300 p-4 rounded-xl font-bold shadow-sm flex items-center justify-between transition transform hover:scale-105 active:scale-95" onclick="showPolicySection('privacy_policy')">
                                 <span><i class="fas fa-shield-alt mr-3 text-blue-500"></i>Privacy Policy</span> <i class="fas fa-chevron-right text-gray-400"></i>
@@ -606,11 +1010,17 @@ async function renderProfilePage(container) {
                             <button class="w-full bg-white text-gray-700 border border-gray-300 p-4 rounded-xl font-bold shadow-sm flex items-center justify-between transition transform hover:scale-105 active:scale-95" onclick="showPolicySection('terms_conditions')">
                                 <span><i class="fas fa-file-contract mr-3 text-purple-500"></i>Terms & Conditions</span> <i class="fas fa-chevron-right text-gray-400"></i>
                             </button>
+                            <button class="w-full bg-white text-gray-700 border border-gray-300 p-4 rounded-xl font-bold shadow-sm flex items-center justify-between transition transform hover:scale-105 active:scale-95" onclick="showPolicySection('deposit_rules')">
+                                <span><i class="fas fa-money-bill-wave mr-3 text-orange-500"></i>Deposit Rules</span> <i class="fas fa-chevron-right text-gray-400"></i>
+                            </button>
+                            <button class="w-full bg-white text-gray-700 border border-gray-300 p-4 rounded-xl font-bold shadow-sm flex items-center justify-between transition transform hover:scale-105 active:scale-95" onclick="showPolicySection('withdrawal_rules')">
+                                <span><i class="fas fa-cash-register mr-3 text-teal-500"></i>Withdrawal Rules</span> <i class="fas fa-chevron-right text-gray-400"></i>
+                            </button>
                             <button class="w-full bg-white text-gray-700 border border-gray-300 p-4 rounded-xl font-bold shadow-sm flex items-center justify-between transition transform hover:scale-105 active:scale-95" onclick="showMySupportMessages()">
                                 <span><i class="fas fa-inbox mr-3 text-gray-500"></i>My Support Messages</span> <i class="fas fa-chevron-right text-gray-400"></i>
                             </button>
                         </div>
-                        
+
                         <button onclick="logout()" class="w-full text-white bg-gradient-to-r from-red-500 to-red-700 p-3 rounded-xl font-bold shadow-md">Logout</button>
                     </div>
 
@@ -638,6 +1048,10 @@ async function renderProfilePage(container) {
     updateProfileContent();
 }
 
+/**
+ * Shows a specific policy section by hiding the main profile view.
+ * @param {string} contentKey - The key for the policy content in Firebase.
+ */
 function showPolicySection(contentKey) {
     document.getElementById('mainProfileView').style.display = 'none';
     document.getElementById('policyContentArea').style.display = 'block';
@@ -663,6 +1077,9 @@ function showPolicySection(contentKey) {
     });
 }
 
+/**
+ * Displays the user's support messages.
+ */
 async function showMySupportMessages() {
     document.getElementById('mainProfileView').style.display = 'none';
     document.getElementById('policyContentArea').style.display = 'block';
@@ -695,16 +1112,16 @@ async function showMySupportMessages() {
             const statusClass = msg.status === 'pending' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700';
             const icon = msg.status === 'pending' ? 'fas fa-hourglass-half' : 'fas fa-check-circle';
             const adminReplyHtml = msg.adminReply
-                ? `<div class="bg-blue-50 p-2 rounded-md mt-2 text-sm border border-blue-200"><strong class="text-blue-700">Admin Reply:</strong> ${msg.adminReply.replace(/\n/g, '<br>')}</div>`
+                ? `<div class="bg-blue-50 p-2 rounded-md mt-2 text-sm border border-blue-200"><strong class="text-blue-700">Admin Reply:</strong> ${escapeJsStringForHtmlAttribute(msg.adminReply).replace(/\n/g, '<br>')}</div>`
                 : `<p class="text-xs text-gray-500 italic mt-2">Admin has not replied yet.</p>`;
 
             messagesHtml += `
                 <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
                     <div class="flex justify-between items-center mb-2">
-                        <p class="font-bold text-gray-800">${msg.subject}</p>
+                        <p class="font-bold text-gray-800">${escapeJsStringForHtmlAttribute(msg.subject)}</p>
                         <span class="text-xs font-semibold px-2 py-1 rounded-full ${statusClass}"><i class="${icon} mr-1"></i>${msg.status.toUpperCase()}</span>
                     </div>
-                    <p class="text-sm text-gray-600">Message: <span class="block mt-1 bg-gray-50 p-2 rounded text-xs">${msg.message.replace(/\n/g, '<br>')}</span></p>
+                    <p class="text-sm text-gray-600">Message: <span class="block mt-1 bg-gray-50 p-2 rounded text-xs">${escapeJsStringForHtmlAttribute(msg.message).replace(/\n/g, '<br>')}</span></p>
                     ${adminReplyHtml}
                     <p class="text-xs text-gray-400 mt-2">Sent: ${new Date(msg.timestamp).toLocaleString()}</p>
                 </div>
@@ -716,6 +1133,9 @@ async function showMySupportMessages() {
     window.scrollTo(0, 0);
 }
 
+/**
+ * Shows the main profile view and hides policy/messages sections.
+ */
 function showMainProfileView() {
     document.getElementById('mainProfileView').style.display = 'block';
     document.getElementById('policyContentArea').style.display = 'none';
@@ -724,6 +1144,9 @@ function showMainProfileView() {
     window.scrollTo(0, 0);
 }
 
+/**
+ * Updates dynamic content on the profile page based on `currentUserData`.
+ */
 function updateProfileContent() {
     if (currentUserData) {
         const usernameEl = document.querySelector('#mainProfileView .text-xl.font-bold');
@@ -732,7 +1155,7 @@ function updateProfileContent() {
         if (emailEl) emailEl.textContent = currentUserData.email || auth.currentUser?.email || 'N/A';
 
         // Update profile page referral count
-        const referralsEarnedEl = document.getElementById('profile-referrals-count'); 
+        const referralsEarnedEl = document.getElementById('profile-referrals-count'); // Using new ID
         if (referralsEarnedEl) {
             const countToDisplay = currentUserData.referrals_earned_count || 0;
             referralsEarnedEl.textContent = countToDisplay;
@@ -757,13 +1180,20 @@ function updateProfileContent() {
         if (adminDepositNumEl) {
             adminDepositNumEl.textContent = adminDepositNumber;
         }
+    } else {
+        console.warn("DEBUG: updateProfileContent called but currentUserData is null.");
     }
 }
 
+// NOTE: The `generateReferralLink(uid)` function is not strictly needed anymore as the referral code is just the username.
+// Keeping it for completeness if needed for a different "link" format later.
 function generateReferralLink(uid) {
     return currentUserData?.username || '';
 }
 
+/**
+ * Copies the referral username to the clipboard.
+ */
 function copyReferralLink() {
     const referralLinkInput = document.getElementById('referralLinkInput');
     if (referralLinkInput) {
@@ -774,6 +1204,9 @@ function copyReferralLink() {
     }
 }
 
+/**
+ * Attaches event listeners for the login/signup tabs and forms in the auth modal.
+ */
 function attachLoginListeners() {
     const loginTab = document.getElementById('loginTabBtnModal');
     const signupTab = document.getElementById('signupTabBtnModal');
@@ -862,112 +1295,139 @@ function attachLoginListeners() {
         }
     });
 
-    // ------------------------------------------------------------------------
-    // 🔥 FINAL SIGNUP + REFERRAL CODE LOGIC
-    // ------------------------------------------------------------------------
     signupForm.addEventListener('submit', async e => {
         e.preventDefault();
         const { signupUsernameModal, signupEmailModal, signupPasswordModal, signupReferralCodeModal } = e.target;
-        
-        // 1. ALWAYS LOWERCASE (Username & Referral)
-        const username = signupUsernameModal.value.trim().toLowerCase(); 
         const enteredReferralCode = signupReferralCodeModal.value.trim().toLowerCase();
+        const username = signupUsernameModal.value.trim(); // User-entered username, may not be lowercase yet for display purposes.
 
-        // --- Username Already Exist Check ---
-        const finalCheckSnap = await db.ref('usernames/' + username).once('value');
+        // --- Username Already Exist Check (Final Check before Auth Create) ---
+        const finalCheckSnap = await db.ref('usernames/' + username.toLowerCase()).once('value');
         if (finalCheckSnap.exists()) {
             showToast('Username is already taken. Please choose another.', true);
             signupUsernameModal.focus();
             return;
         }
+        // --- END Username Already Exist Check ---
 
         try {
             const cred = await auth.createUserWithEmailAndPassword(signupEmailModal.value, signupPasswordModal.value);
             const newUserId = cred.user.uid;
 
-            const initialSignupBonus = signupBonusAmount; // 80 PKR
-            const referralBonus = referralBonusAmount;
+            // --- START OF USER'S PROVIDED FINAL SIGNUP + REFERRAL CODE ---
+            // The global signupBonusAmount and referralBonusAmount are used here.
 
-            // 2. DATA PREPARATION (referred_by_username is NEVER undefined)
+            const initialSignupBonus = signupBonusAmount; // Use the globally defined signupBonusAmount
+            const referralBonus = referralBonusAmount;   // Use the globally defined referralBonusAmount
+
             let newUserData = {
-                username: username, // Saved as lowercase
+                username: username, // Keep original casing for display, but use .toLowerCase() for DB keys/lookups where needed
                 email: signupEmailModal.value,
-                wallet_balance: initialSignupBonus, // ✅ ALWAYS 80
+                wallet_balance: initialSignupBonus, // ALWAYS initial signup bonus (80)
                 referrals_earned_count: 0,
-                referral_code: username,
-                referred_by_username: enteredReferralCode || null, // ✅ Use null if empty
                 created_at: new Date().toISOString(),
                 locked: false,
-                lockReason: ""
+                lockReason: null
             };
+            // Set the new user's own referral_code based on their username
+            newUserData.referral_code = username.toLowerCase(); // Store as lowercase for consistency
 
-            let feedbackMessage = `Signup successful! You got PKR ${initialSignupBonus} 🎉`;
+            // Debugging line: Check the data being prepared BEFORE referral logic
+            console.log("DEBUG (Signup): newUserData initialized with signup bonus:", { ...newUserData });
 
-            // 3. REFERRAL LINKING LOGIC
-            if (enteredReferralCode && enteredReferralCode !== username) {
-                // Fast lookup using usernames mapping instead of looping all users
+            let feedbackMessage = `Signup successful! You got PKR ${initialSignupBonus} 🎉`; // Default message for new user
+
+            // --- REFERRAL LOGIC ---
+            if (enteredReferralCode && enteredReferralCode !== username.toLowerCase()) { // Compare entered code (lowercase) with new user's username (lowercase)
+                console.log("DEBUG (Signup): Referral code detected:", enteredReferralCode);
+
+                // Use lowercase for DB lookup for referrer's UID
                 const refSnap = await db.ref('usernames/' + enteredReferralCode).once('value');
 
                 if (refSnap.exists()) {
                     const referrerUid = refSnap.val();
+                    console.log("DEBUG (Signup): Referrer found. UID:", referrerUid);
 
-                    // ✅ Referrer ka wallet update
+                    // Referrer wallet update
                     await db.ref(`users/${referrerUid}`).transaction((data) => {
                         if (data) {
-                            data.wallet_balance = (data.wallet_balance || 0) + referralBonus;
+                            data.wallet_balance = (data.wallet_balance || 0) + referralBonus; // Use referralBonus
                             data.referrals_earned_count = (data.referrals_earned_count || 0) + 1;
                         }
                         return data;
                     });
+                    console.log("DEBUG (Signup): Referrer wallet updated via transaction. New user wallet_balance is untouched and still:", newUserData.wallet_balance);
 
-                    // ✅ Referrer transaction history
+                    // Referrer transaction history
                     await db.ref(`transactions/${referrerUid}`).push({
-                        amount: referralBonus,
+                        amount: referralBonus, // Use referralBonus
                         type: "credit",
-                        description: `Referral bonus from ${username}`,
+                        description: `Referral bonus from ${username}`, // Show new user's username
                         created_at: new Date().toISOString()
                     });
+                    console.log("DEBUG (Signup): Referrer transaction logged.");
 
-                    // Linked successfully
-                    newUserData.referred_by_username = enteredReferralCode;
-                    feedbackMessage = `Signup successful! You got PKR ${initialSignupBonus} & referrer rewarded 🎉`;
+                    // Save referral info for new user (IMPORTANT)
+                    newUserData.referred_by_username = enteredReferralCode; // Save the entered referral username
+                    console.log("DEBUG (Signup): newUserData updated with referred_by_username:", newUserData.referred_by_username);
+                    feedbackMessage = `Signup successful! You got PKR ${initialSignupBonus} & referrer rewarded 🎉`; // Update message
                 } else {
-                    // Invalid referral code -> ensure it stays null
-                    newUserData.referred_by_username = null;
-                    feedbackMessage = `Signup successful! You got PKR ${initialSignupBonus} (Invalid referral code)`;
+                    console.warn("DEBUG (Signup): Invalid referral username entered. Applying only signup bonus to new user.");
+                    feedbackMessage = `Signup successful! You got PKR ${initialSignupBonus} (Invalid referral code)`; // Inform user, but still apply bonus
                 }
-            } else if (enteredReferralCode === username) {
-                newUserData.referred_by_username = null;
-                feedbackMessage = `Signup successful! You got PKR ${initialSignupBonus} (Cannot refer yourself)`;
+            } else if (enteredReferralCode === username.toLowerCase()) { // Compare lowercase
+                console.warn("DEBUG (Signup): User tried to refer self. Applying only signup bonus to new user.");
+                feedbackMessage = `Signup successful! You got PKR ${initialSignupBonus} (Cannot refer yourself)`; // Inform user, but still apply bonus
             }
 
-            // 4. DATABASE WRITE (🔥 ONLY ONCE & LAST)
+            // --- SAVE USER DATA (ONLY ONCE & LAST) ---
+            console.log("DEBUG (Signup): newUserData BEFORE final set for UID:", newUserId, { ...newUserData });
+
             const userRef = db.ref('users/' + newUserId);
+            // Pehle check karo data hai ya nahi (IMPORTANT: to prevent accidental overwrite if onAuthStateChanged creates a default)
             const snap = await userRef.once('value');
 
-            if (!snap.exists()) { 
-                await userRef.set(newUserData); 
+            if (!snap.exists()) { // ONLY IF NOT EXISTS
+                await userRef.set(newUserData);
+                console.log("DEBUG (Signup): New user data saved successfully to Firebase (initially did not exist).");
             } else {
-                await userRef.update(newUserData); 
+                console.warn("DEBUG (Signup): User node already existed before signupForm.set(). Updating with correct data.");
+                await userRef.update({
+                    wallet_balance: newUserData.wallet_balance,
+                    username: newUserData.username,
+                    email: newUserData.email,
+                    referral_code: newUserData.referral_code,
+                    referred_by_username: newUserData.referred_by_username || null,
+                    created_at: newUserData.created_at,
+                    locked: newUserData.locked,
+                    lockReason: newUserData.lockReason
+                });
+                console.log("DEBUG (Signup): Existing user node updated with correct wallet_balance and other data after signup.");
             }
 
-            // Save username mapping
-            await db.ref('usernames/' + username).set(newUserId);
+            // --- USERNAME MAPPING SAVE (using lowercase for consistency in 'usernames' node) ---
+            await db.ref('usernames/' + username.toLowerCase()).set(newUserId);
+            console.log("DEBUG (Signup): Username mapping saved for:", username.toLowerCase());
 
-            // Signup Bonus Transaction
+            // --- NEW USER TRANSACTION (Signup Bonus) ---
             await db.ref(`transactions/${newUserId}`).push({
                 amount: initialSignupBonus,
                 type: "credit",
                 description: "Signup Bonus",
                 created_at: new Date().toISOString()
             });
+            console.log("DEBUG (Signup): Signup bonus transaction logged for new user.");
+
+            // Now display the toast message after all database writes for the new user are done.
+            showToast(feedbackMessage);
+
+            // --- END OF USER'S PROVIDED FINAL SIGNUP + REFERRAL CODE ---
 
             // Reset UI
-            showToast(feedbackMessage);
             toggleModal('authModal', false);
             signupForm.reset();
             signupReferralCodeModal.value = '';
-            document.getElementById('usernameAvailability').textContent = '';
+            usernameAvailability.textContent = '';
 
         } catch (err) {
             console.error("Signup Error:", err);
@@ -975,9 +1435,10 @@ function attachLoginListeners() {
         }
     });
 }
-// --- END REFERRAL LOGIC ---
 
-// --- NEW FUNCTION: Claim Daily Bonus ---
+/**
+ * Handles the "Claim Daily Bonus" action.
+ */
 async function claimDailyBonus() {
     if (!auth.currentUser) {
         showToast('Login required to claim daily bonus!', true);
@@ -1003,18 +1464,20 @@ async function claimDailyBonus() {
         }
 
         const lastClaimTimestamp = userData.last_daily_bonus_claim_timestamp || 0;
-        const twentyFourHours = 24 * 60 * 60 * 1000; 
+        const twentyFourHours = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
         if (Date.now() - lastClaimTimestamp < twentyFourHours) {
             const timeLeft = twentyFourHours - (Date.now() - lastClaimTimestamp);
             const hours = Math.floor(timeLeft / (1000 * 60 * 60));
             const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
             showToast(`You can claim your next daily bonus in ${hours}h ${minutes}m.`, true);
+            
             window.open('https://toolswebsite205.blogspot.com', '_blank'); 
             return;
         }
 
-        const randomBonus = Math.floor(Math.random() * 80) + 10;
+        // Generate random bonus between 10 and 1000 (inclusive)
+        const randomBonus = Math.floor(Math.random() * 991) + 10;
         
         let committed = false;
         await userRef.transaction(data => {
@@ -1044,6 +1507,8 @@ async function claimDailyBonus() {
                 if (document.getElementById('profilePage').classList.contains('active')) {
                     updateProfileContent();
                 }
+            } else {
+                console.log("Daily bonus transaction aborted.");
             }
         });
 
@@ -1053,8 +1518,10 @@ async function claimDailyBonus() {
         window.open('https://toolswebsite205.blogspot.com', '_blank');
     }
 }
-// --- END NEW FUNCTION: Claim Daily Bonus ---
 
+/**
+ * Attaches event listeners for the tabs on the My Tournaments page.
+ */
 function attachMyTournamentsListeners() {
     const upcomingTab = document.getElementById('upcomingLiveTab');
     const completedTab = document.getElementById('completedTab');
@@ -1062,6 +1529,7 @@ function attachMyTournamentsListeners() {
     const completedContent = document.getElementById('completedContent');
 
     if (!upcomingTab || !completedTab || !upcomingContent || !completedContent) {
+        console.warn("My Tournaments tab elements not found, skipping attaching listeners.");
         return;
     }
 
@@ -1069,6 +1537,12 @@ function attachMyTournamentsListeners() {
     completedTab.addEventListener('click', () => { completedTab.className = "flex-1 py-2 text-center font-bold border-b-4 border-red-500 text-red-600"; upcomingTab.className = "flex-1 py-2 text-center font-bold text-gray-400 border-b-4 border-transparent"; completedContent.style.display = 'block'; upcomingContent.style.display = 'none'; });
 }
 
+/**
+ * Handles joining a tournament. Deducts entry fee and adds user as participant.
+ * @param {Event} event - The form submission event.
+ * @param {string} tournamentId - The ID of the tournament.
+ * @param {number} entryFee - The entry fee for the tournament.
+ */
 async function joinTournament(event, tournamentId, entryFee) {
     event.preventDefault();
     const user = auth.currentUser;
@@ -1099,6 +1573,10 @@ async function joinTournament(event, tournamentId, entryFee) {
     }
 }
 
+/**
+ * Handles adding money to the user's account via deposit request.
+ * @param {Event} event - The form submission event.
+ */
 async function addMoney(event) {
     event.preventDefault();
     const amount = Number(document.getElementById('add-amount').value);
@@ -1140,9 +1618,13 @@ async function addMoney(event) {
     showToast('Deposit request submitted! Awaiting verification.');
     toggleModal('addMoneyModal', false);
     event.target.reset();
-    acceptRulesCheckbox.checked = false; 
+    acceptRulesCheckbox.checked = false; // Reset checkbox after submission
 }
 
+/**
+ * Handles withdrawal requests from the user's account.
+ * @param {Event} event - The form submission event.
+ */
 async function withdrawMoney(event) {
     event.preventDefault();
 
@@ -1155,6 +1637,7 @@ async function withdrawMoney(event) {
     if (amount < minWithdrawalAmount) {
         return showToast(`Minimum withdrawal amount is ${formatCurrency(minWithdrawalAmount)}`, true);
     }
+
     if (!withdrawNumber || !ownerName || !accountType) {
         return showToast('Please fill all withdrawal details!', true);
     }
@@ -1175,13 +1658,19 @@ async function withdrawMoney(event) {
         return showToast('Insufficient funds!', true);
     }
 
+    // --- NEW WITHDRAWAL RULE CHECK FOR DAILY BONUS ---
     if (currentUserData.daily_bonus_withdrawal_condition_active) {
+        console.log("DEBUG: Daily bonus withdrawal condition is active.");
         const requiredReferrals = 10; 
+
         if ((currentUserData.referrals_earned_count || 0) < requiredReferrals) {
             showToast(`Withdrawal requires at least ${requiredReferrals} referrals for bonus funds. You have ${currentUserData.referrals_earned_count || 0}.`, true);
             return;
         }
+        
+        console.log(`DEBUG: Daily bonus withdrawal conditions (referral count) met: ${currentUserData.referrals_earned_count}. Proceeding.`);
     }
+    // --- END NEW WITHDRAWAL RULE CHECK ---
 
     const uid = user.uid;
 
@@ -1200,10 +1689,10 @@ async function withdrawMoney(event) {
             user_username: currentUserData.username || "N/A"
         });
 
-        showToast("Withdrawal request sent! Waiting for admin approval.");
+        showToast("Withdrawal request sent! Waiting for admin approval. Amount will be deducted upon approval.");
         toggleModal("withdrawMoneyModal", false);
         event.target.reset();
-        acceptRulesCheckbox.checked = false;
+        acceptRulesCheckbox.checked = false; // Reset checkbox after submission
 
     } catch (error) {
         console.error("Error during withdrawal request:", error);
@@ -1211,15 +1700,13 @@ async function withdrawMoney(event) {
     }
 }
 
+/**
+ * Handles adding a new game submitted by a user.
+ * Deducts cost from wallet and adds game to Firebase.
+ * @param {Event} event - The form submission event.
+ */
 async function addNewGame(event) {
     event.preventDefault();
-    const acceptGameRulesCheckbox = document.getElementById('acceptGameSubmissionRules'); 
-
-    if (!acceptGameRulesCheckbox.checked) {
-        showToast('Please accept the Game Submission Policy to add a game.', true);
-        return;
-    }
-
     const user = auth.currentUser;
     if (!user) {
         showToast('Login required to add games!', true);
@@ -1234,8 +1721,9 @@ async function addNewGame(event) {
     const gameTitle = document.getElementById('gameTitleInput').value.trim();
     const gameImageUrl = document.getElementById('gameImageUrlInput').value.trim();
     const gameUrl = document.getElementById('gameUrlInput').value.trim();
+    const gameCategory = document.getElementById('gameCategoryInput').value.trim(); 
 
-    if (!gameTitle || !gameImageUrl || !gameUrl) {
+    if (!gameTitle || !gameImageUrl || !gameUrl || !gameCategory) { 
         showToast('All fields are required!', true);
         return;
     }
@@ -1268,6 +1756,7 @@ async function addNewGame(event) {
                     title: gameTitle,
                     image_url: gameImageUrl,
                     game_url: gameUrl,
+                    category: gameCategory, 
                     created_by: user.uid,
                     created_at: new Date().toISOString()
                 });
@@ -1281,7 +1770,6 @@ async function addNewGame(event) {
                 showToast('Game added successfully and PKR 100 deducted from your wallet!');
                 toggleModal('addGameModal', false);
                 event.target.reset();
-                acceptGameRulesCheckbox.checked = false; 
                 loadPageContent('homePage');
             } else {
                 showToast(`Transaction aborted: Insufficient balance. You need ${formatCurrency(gameCost)} to add a game.`, true);
@@ -1294,6 +1782,10 @@ async function addNewGame(event) {
     }
 }
 
+/**
+ * Handles sending a contact message from the user to admin.
+ * @param {Event} event - The form submission event.
+ */
 async function sendContactMessage(event) {
     event.preventDefault();
     const user = auth.currentUser;
@@ -1334,10 +1826,17 @@ async function sendContactMessage(event) {
     }
 }
 
+
+/**
+ * Logs the current user out of the application.
+ */
 function logout() {
     auth.signOut();
 }
 
+/**
+ * Sends a password reset email to the current user.
+ */
 function changePassword() {
     const user = auth.currentUser;
     if (user && user.email) {
@@ -1349,30 +1848,35 @@ function changePassword() {
     }
 }
 
+/**
+ * Initializes the application once the DOM is fully loaded.
+ */
 document.addEventListener('DOMContentLoaded', async () => {
-    if (firebase.apps.length) {
-        attachLoginListeners();
-        document.getElementById('addMoneyForm').addEventListener('submit', addMoney);
-        document.getElementById('withdrawMoneyForm').addEventListener('submit', withdrawMoney);
-        document.getElementById('addGameForm').addEventListener('submit', addNewGame);
-        document.getElementById('contactUsForm').addEventListener('submit', sendContactMessage);
 
-        const appSettingsSnap = await db.ref('app_settings').once('value');
-        const appSettings = appSettingsSnap.val();
-        if (appSettings) {
-            adminDepositNumber = appSettings.adminDepositNumber || adminDepositNumber;
-            minWithdrawalAmount = appSettings.minWithdrawalAmount || minWithdrawalAmount;
-            referralBonusAmount = appSettings.referralBonusAmount || referralBonusAmount;
-            signupBonusAmount = appSettings.signupBonusAmount || signupBonusAmount;
+    // Attach event listeners for forms and buttons
+    attachLoginListeners();
+    document.getElementById('addMoneyForm').addEventListener('submit', addMoney);
+    document.getElementById('withdrawMoneyForm').addEventListener('submit', withdrawMoney);
+    document.getElementById('addGameForm').addEventListener('submit', addNewGame);
+    document.getElementById('contactUsForm').addEventListener('submit', sendContactMessage);
 
-            const adminDepositNumEl = document.getElementById('admin-deposit-number');
-            if (adminDepositNumEl) adminDepositNumEl.textContent = adminDepositNumber;
-            const withdrawAmountInput = document.getElementById('withdraw-amount');
-            if (withdrawAmountInput) withdrawAmountInput.placeholder = `Enter amount min ${minWithdrawalAmount} (PKR)`;
-            const referralBonusTextEl = document.getElementById('referral-bonus-text');
-            if (referralBonusTextEl) referralBonusTextEl.textContent = referralBonusAmount;
-        }
+    // Fetch global app settings from Firebase and update UI elements
+    const appSettingsSnap = await db.ref('app_settings').once('value');
+    const appSettings = appSettingsSnap.val();
+    if (appSettings) {
+        adminDepositNumber = appSettings.adminDepositNumber || adminDepositNumber;
+        minWithdrawalAmount = appSettings.minWithdrawalAmount || minWithdrawalAmount;
+        referralBonusAmount = appSettings.referralBonusAmount || referralBonusAmount;
+        signupBonusAmount = appSettings.signupBonusAmount || signupBonusAmount;
 
-        navigateTo('homePage');
+        const adminDepositNumEl = document.getElementById('admin-deposit-number');
+        if (adminDepositNumEl) adminDepositNumEl.textContent = adminDepositNumber;
+        const withdrawAmountInput = document.getElementById('withdraw-amount');
+        if (withdrawAmountInput) withdrawAmountInput.placeholder = `Enter amount min ${minWithdrawalAmount} (PKR)`;
+        const referralBonusTextEl = document.getElementById('referral-bonus-text');
+        if (referralBonusTextEl) referralBonusTextEl.textContent = referralBonusAmount;
     }
+
+    // Set initial page view
+    navigateTo('homePage');
 });
