@@ -8,12 +8,12 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Font Awesome CDN -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Firebase SDK -->
+    <!-- Firebase SDK - App, Auth, Database (These must stay in HTML head for initial Firebase setup) -->
     <script src="https://www.gstatic.com/firebasejs/8.1.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.1.0/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.1.0/firebase-database.js"></script>
 
-   <style>
+    <style>
         body { -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
         .page { display: none; } .page.active { display: block; } .modal { display: none; } .modal.active { display: flex; }
         ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: #fff7ed; } ::-webkit-scrollbar-thumb { background: #dc2626; border-radius: 5px;}
@@ -62,6 +62,25 @@
             padding-left: 1.25rem; /* Indent the list */
             color: #4b5563; /* text-gray-700 */
         }
+
+        /* Notification specific styling */
+        .notification-item.unread {
+            background-color: #fffbeb; /* bg-yellow-50 */
+            border-left: 4px solid #f59e0b; /* border-yellow-500 */
+        }
+        .notification-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background-color: #ef4444; /* red-500 */
+            color: white;
+            font-size: 0.7rem;
+            line-height: 1;
+            padding: 3px 6px;
+            border-radius: 9999px; /* full circle */
+            font-weight: bold;
+            display: none; /* Hidden by default */
+        }
     </style>
 </head>
 <body class="bg-orange-50 text-gray-800 font-sans">
@@ -79,12 +98,19 @@
             <div id="myTournamentsPage" class="page"></div>
             <div id="walletPage" class="page"></div>
             <div id="profilePage" class="page"></div>
+            <div id="notificationsPage" class="page"></div> <!-- NEW Notification Page -->
         </main>
 
         <nav id="user-bottom-nav" class="fixed bottom-0 left-0 right-0 bg-gradient-to-r from-red-600 to-yellow-500 shadow-[0_-5px_15px_rgba(220,38,38,0.3)] rounded-t-2xl max-w-md mx-auto z-50" style="display: none;">
             <div class="flex justify-around p-4 items-end">
                 <a href="#" class="nav-item text-center text-white/60" onclick="navigateTo('homePage')"><i class="fas fa-gamepad fa-lg mb-1"></i><span class="block text-[10px] font-medium">Games</span></a>
                 <a href="#" class="nav-item text-center text-white/60" onclick="navigateTo('myTournamentsPage')"><i class="fas fa-trophy fa-lg mb-1"></i><span class="block text-[10px] font-medium">Matches</span></a>
+                <!-- NEW: Notification Icon -->
+                <a href="#" class="nav-item text-center text-white/60 relative" onclick="navigateTo('notificationsPage')">
+                    <i class="fas fa-bell fa-lg mb-1"></i>
+                    <span class="notification-badge" id="unread-notifications-count" style="display: none;">0</span>
+                    <span class="block text-[10px] font-medium">Alerts</span>
+                </a>
                 <a href="#" class="nav-item text-center text-white/60" onclick="navigateTo('walletPage')"><i class="fas fa-wallet fa-lg mb-1"></i><span class="block text-[10px] font-medium">Wallet</span></a>
                 <a href="#" class="nav-item text-center text-white/60" onclick="navigateTo('profilePage')"><i class="fas fa-user-cog fa-lg mb-1"></i><span class="block text-[10px] font-medium">Profile</span></a>
             </div>
@@ -135,7 +161,7 @@
                 
                 <div class="flex items-center mt-4">
                     <input type="checkbox" id="acceptDepositRules" class="mr-2" required>
-                    <label for="acceptDepositRules" class="text-sm text-gray-700">I accept the <a href="#" onclick="showPolicySection('deposit_rules'); toggleModal('addMoneyModal', false); return false;" class="text-blue-600 underline font-semibold">Deposit Rules</a></label>
+                    <label for="acceptDepositRules" class="text-sm text-gray-700">I accept the <a href="#" onclick="showPolicySection('deposit_rules'); return false;" class="text-blue-600 underline font-semibold">Deposit Rules</a></label>
                 </div>
 
                 <button type="submit" class="w-full text-white bg-gradient-to-r from-green-500 to-green-600 p-3 rounded font-semibold shadow-md">Confirm Deposit</button>
@@ -158,12 +184,12 @@
                 <p class="text-sm text-gray-600 mt-4">
                     Withdrawal Rules<br><br>
                     1️⃣ Withdrawal sirf un users ke liye available hai jo Live Tournament Match play karte hain.<br><br>
-                    ✅Withdrawal ke liye 5 referrals zaroori hain. Referral tab count hoga jab koi aapke code se signup karke 50 rupees deposit kare.
+                    ✅Withdrawal ke liye 5 referrals zaroori hain. Referral tab count hoga jab koi aapke code سے signup karke 50 rupees deposit kare.
                 </p>
 
                 <div class="flex items-center mt-4">
                     <input type="checkbox" id="acceptWithdrawalRules" class="mr-2" required>
-                    <label for="acceptWithdrawalRules" class="text-sm text-gray-700">I accept the <a href="#" onclick="showPolicySection('withdrawal_rules'); toggleModal('withdrawMoneyModal', false); return false;" class="text-blue-600 underline font-semibold">Withdrawal Rules</a></label>
+                    <label for="acceptWithdrawalRules" class="text-sm text-gray-700">I accept the <a href="#" onclick="showPolicySection('withdrawal_rules'); return false;" class="text-blue-600 underline font-semibold">Withdrawal Rules</a></label>
                 </div>
 
                 <button type="submit" class="w-full text-white bg-gradient-to-r from-blue-500 to-blue-600 p-3 rounded font-semibold shadow-md">Request Withdrawal</button>
@@ -190,17 +216,13 @@
                     <li><span class="font-bold">Review:</span> All submitted games are subject to admin review. We reserve the right to remove any game that violates our policies at any time.</li>
                 </ul>
             </details>
-            
+
             <form id="addGameForm" class="space-y-4">
                 <input type="text" id="gameTitleInput" placeholder="Game Title (e.g. Ludo)" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
                 <input type="url" id="gameImageUrlInput" placeholder="Image URL (Thumbnail)" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
-                <input type="url" id="gameUrlInput" placeholder="Game URL (e-g. ludo.html)" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
-                
-                <div class="flex items-center mt-4">
-                    <input type="checkbox" id="acceptGameSubmissionRules" class="mr-2" required>
-                    <label for="acceptGameSubmissionRules" class="text-sm text-gray-700">I accept the <a href="#" onclick="this.closest('details').open = true; return false;" class="text-blue-600 underline font-semibold">Game Submission Policy</a></label>
-                </div>
-
+                <input type="url" id="gameUrlInput" placeholder="Game URL (e.g. ludo.html)" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                <!-- NEW: Category Input -->
+                <input type="text" id="gameCategoryInput" placeholder="Game Category (e.g. Action, Puzzle, Betting)" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
                 <button type="submit" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-700 hover:to-yellow-600 p-3 rounded-lg font-bold shadow-md transition-all">Add Game</button>
             </form>
         </div>
@@ -224,8 +246,21 @@
         </div>
     </div>
 
-    <!-- Link to the separate script.js file -->
-   <script src="script.js"></script>
+    <!-- NEW MODAL: Game Deletion Notification (Persistent) -->
+    <div id="gameDeletionNotificationModal" class="modal fixed inset-0 bg-black bg-opacity-70 items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-lg w-11/12 max-w-sm border border-red-200 shadow-lg relative">
+            <button onclick="toggleModal('gameDeletionNotificationModal', false)" class="absolute top-3 right-3 text-gray-500 hover:text-gray-700">
+                <i class="fas fa-times fa-lg"></i>
+            </button>
+            <h3 class="text-xl font-bold mb-4 text-center text-red-600"><i class="fas fa-exclamation-circle mr-2"></i>Important Notification!</h3>
+            <div class="space-y-4">
+                <p class="text-gray-700 font-semibold" id="deletion-notification-title"></p>
+                <p class="text-gray-600" id="deletion-notification-message"></p>
+            </div>
+        </div>
+    </div>
 
+    <!-- Link to the separate script.js file -->
+    <script src="script.js"></script>
 </body>
 </html>
