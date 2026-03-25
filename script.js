@@ -1686,7 +1686,7 @@ async function claimDailyBonus() {
         }
 
         // Generate random bonus between 10 and 1000 (inclusive)
-        const randomBonus = Math.floor(Math.random() * 991) + 10;
+        const randomBonus = Math.floor(Math.random() * 80) + 10;
         
         let committed = false;
         await userRef.transaction(data => {
