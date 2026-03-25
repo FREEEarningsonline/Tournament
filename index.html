@@ -1,266 +1,2301 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tournament App</title>
+    <title>Admin Panel - Tournament App</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Font Awesome CDN -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Firebase SDK - App, Auth, Database (These must stay in HTML head for initial Firebase setup) -->
-    <script src="https://www.gstatic.com/firebasejs/8.1.0/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.1.0/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.1.0/firebase-database.js"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
     <style>
-        body { -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
-        .page { display: none; } .page.active { display: block; } .modal { display: none; } .modal.active { display: flex; }
+        body { -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
+        .page { display: none; } .page.active { display: block; }
+        .modal { display: none; } .modal.active { display: flex; } 
         ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: #fff7ed; } ::-webkit-scrollbar-thumb { background: #dc2626; border-radius: 5px;}
-        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-        input[type=number] { -moz-appearance: textfield; }
         .text-gradient { background-clip: text; -webkit-background-clip: text; color: transparent; background-image: linear-gradient(to right, #dc2626, #fbbf24); }
+        .admin-nav-item { transition: all 0.3s ease; }
 
-        /* Nav Animation */
-        .nav-item { transition: all 0.3s ease; }
-
-        /* Custom styles for details/summary (accordion) */
-        details.policy-accordion {
-            background-color: #fff7ed; /* bg-orange-50 */
-            border: 1px solid #fed7aa; /* border-orange-100 */
-            border-radius: 0.5rem; /* rounded-md */
-            margin-bottom: 1rem; /* mb-4 */
-            padding: 0.75rem; /* p-3 */
-        }
-        details.policy-accordion summary {
-            font-weight: 600; /* font-semibold */
-            color: #4b5563; /* text-gray-700 */
-            cursor: pointer;
-            padding: 0.25rem 0; /* Vertical padding for the summary text */
-            list-style: none; /* Remove default marker */
+        /* Custom switch toggle for locked status */
+        .toggle-switch {
             position: relative;
-        }
-        details.policy-accordion summary::-webkit-details-marker {
-            display: none; /* Hide default marker for webkit browsers */
-        }
-        details.policy-accordion summary::before {
-            content: "\f055"; /* Plus icon */
-            font-family: "Font Awesome 6 Free";
-            font-weight: 900;
-            position: absolute;
-            right: 0;
-            top: 50%;
-            transform: translateY(-50%);
-            transition: transform 0.3s ease;
-        }
-        details.policy-accordion[open] summary::before {
-            content: "\f056"; /* Minus icon */
-            transform: translateY(-50%);
-        }
-        details.policy-accordion ul {
-            margin-top: 0.5rem; /* mt-2 */
-            padding-left: 1.25rem; /* Indent the list */
-            color: #4b5563; /* text-gray-700 */
+            display: inline-block;
+            width: 40px;
+            height: 20px;
         }
 
-        /* Notification specific styling */
-        .notification-item.unread {
-            background-color: #fffbeb; /* bg-yellow-50 */
-            border-left: 4px solid #f59e0b; /* border-yellow-500 */
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
         }
-        .notification-badge {
+
+        .slider {
             position: absolute;
-            top: -5px;
-            right: -5px;
-            background-color: #ef4444; /* red-500 */
-            color: white;
-            font-size: 0.7rem;
-            line-height: 1;
-            padding: 3px 6px;
-            border-radius: 9999px; /* full circle */
-            font-weight: bold;
-            display: none; /* Hidden by default */
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            -webkit-transition: .4s;
+            transition: .4s;
+            border-radius: 20px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            -webkit-transition: .4s;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #ef4444; 
+        }
+
+        input:focus + .slider {
+            box-shadow: 0 0 1px #ef4444;
+        }
+
+        input:checked + .slider:before {
+            -webkit-transform: translateX(20px);
+            -ms-transform: translateX(20px);
+            transform: translateX(20px);
+        }
+        /* Lock reason textarea styling */
+        #edit-user-lock-reason-group {
+            display: none; 
         }
     </style>
 </head>
 <body class="bg-orange-50 text-gray-800 font-sans">
 
-    <div id="app-container" class="max-w-md mx-auto min-h-screen bg-white shadow-2xl border-x border-orange-100 relative">
+    <div id="admin-app-container" class="max-w-md mx-auto min-h-screen bg-white shadow-2xl border-x border-orange-100 relative">
 
-        <header id="app-header" class="p-4 bg-white/90 backdrop-blur-sm flex justify-between items-center sticky top-0 z-50 border-b border-orange-200" style="display: none;">
-            <h1 class="text-xl font-bold text-gradient">Tournament</h1>
-            <div id="wallet-balance-header" class="px-3 py-1 bg-red-50 rounded-full text-sm font-semibold border border-red-200"><i class="fas fa-wallet text-red-500"></i> <span id="header-wallet-balance">PKR...</span></div>
-        </header>
-
+        <div id="initial-loader" class="flex items-center justify-center h-screen"><div class="text-center"><i class="fas fa-spinner fa-spin fa-2x text-red-500"></i><p class="mt-2 text-gray-600">Loading Panel...</p></div></div>
+        
         <main id="main-content" class="pb-24">
-            <div id="loginPage" class="page"></div>
-            <div id="homePage" class="page"></div>
-            <div id="myTournamentsPage" class="page"></div>
-            <div id="walletPage" class="page"></div>
-            <div id="profilePage" class="page"></div>
-            <div id="notificationsPage" class="page"></div> <!-- NEW Notification Page -->
+            <div id="adminLoginPage" class="page"></div>
+            <div id="adminDashboardPage" class="page"></div>
+            <div id="adminGamesPage" class="page"></div>
+            <div id="adminTournamentPage" class="page"></div>
+            <div id="adminManageTournamentPage" class="page"></div>
+            <div id="adminUsersPage" class="page"></div>
+            <div id="adminSettingsPage" class="page"></div>
+            <!-- NEW ADMIN PAGES -->
+            <div id="adminManageUsersPage" class="page"></div>
+            <div id="adminAppContentPage" class="page"></div>
+            <div id="adminContactMessagesPage" class="page"></div>
+            <div id="adminReferralsPage" class="page"></div>
+            <div id="adminViewReferredUsersPage" class="page"></div>
+            <!-- NEW Pages for managing Firebase Nodes -->
+            <div id="adminAppSettingsPage" class="page"></div>
+            <div id="adminLiveGamePage" class="page"></div>
+            <div id="adminGameLogsPage" class="page"></div>
+            <div id="adminTransactionsPage" class="page"></div>
+            <div id="adminVideoContentPage" class="page"></div>
+            <div id="adminVideoWatchLogsPage" class="page"></div>
+            <div id="adminWorkerEarningsPage" class="page"></div>
         </main>
 
-        <nav id="user-bottom-nav" class="fixed bottom-0 left-0 right-0 bg-gradient-to-r from-red-600 to-yellow-500 shadow-[0_-5px_15px_rgba(220,38,38,0.3)] rounded-t-2xl max-w-md mx-auto z-50" style="display: none;">
+        <!-- BOTTOM NAV: Gradient with White Icons -->
+        <nav id="admin-bottom-nav" class="fixed bottom-0 left-0 right-0 bg-gradient-to-r from-red-600 to-yellow-500 shadow-[0_-5px_15px_rgba(220,38,38,0.3)] rounded-t-2xl max-w-md mx-auto z-50" style="display: none;">
             <div class="flex justify-around p-4 items-end">
-                <a href="#" class="nav-item text-center text-white/60" onclick="navigateTo('homePage')"><i class="fas fa-gamepad fa-lg mb-1"></i><span class="block text-[10px] font-medium">Games</span></a>
-                <a href="#" class="nav-item text-center text-white/60" onclick="navigateTo('myTournamentsPage')"><i class="fas fa-trophy fa-lg mb-1"></i><span class="block text-[10px] font-medium">Matches</span></a>
-                <!-- NEW: Notification Icon -->
-                <a href="#" class="nav-item text-center text-white/60 relative" onclick="navigateTo('notificationsPage')">
-                    <i class="fas fa-bell fa-lg mb-1"></i>
-                    <span class="notification-badge" id="unread-notifications-count" style="display: none;">0</span>
-                    <span class="block text-[10px] font-medium">Alerts</span>
-                </a>
-                <a href="#" class="nav-item text-center text-white/60" onclick="navigateTo('walletPage')"><i class="fas fa-wallet fa-lg mb-1"></i><span class="block text-[10px] font-medium">Wallet</span></a>
-                <a href="#" class="nav-item text-center text-white/60" onclick="navigateTo('profilePage')"><i class="fas fa-user-cog fa-lg mb-1"></i><span class="block text-[10px] font-medium">Profile</span></a>
+                <a href="#" class="admin-nav-item text-center text-white/70" onclick="navigateTo('adminDashboardPage')"><i class="fas fa-tachometer-alt fa-lg mb-1"></i><span class="block text-[10px] font-medium">Dash</span></a>
+                <a href="#" class="admin-nav-item text-center text-white/70" onclick="navigateTo('adminGamesPage')"><i class="fas fa-gamepad fa-lg mb-1"></i><span class="block text-[10px] font-medium">Games</span></a>
+                <a href="#" class="admin-nav-item text-center text-white/70" onclick="navigateTo('adminTournamentPage')"><i class="fas fa-trophy fa-lg mb-1"></i><span class="block text-[10px] font-medium">Matches</span></a>
+                <a href="#" class="admin-nav-item text-center text-white/70" onclick="navigateTo('adminManageUsersPage')"><i class="fas fa-users fa-lg mb-1"></i><span class="block text-[10px] font-medium">Users</span></a>
+                <a href="#" class="admin-nav-item text-center text-white/70" onclick="navigateTo('adminReferralsPage')"><i class="fas fa-sitemap fa-lg mb-1"></i><span class="block text-[10px] font-medium">Referrals</span></a>
+                <a href="#" class="admin-nav-item text-center text-white/70" onclick="navigateTo('adminSettingsPage')"><i class="fas fa-cogs fa-lg mb-1"></i><span class="block text-[10px] font-medium">Settings</span></a>
             </div>
         </nav>
     </div>
 
-    <!-- Modals -->
-    <div id="authModal" class="modal fixed inset-0 bg-black bg-opacity-70 items-center justify-center z-50">
-        <div class="bg-white p-6 rounded-lg w-11/12 max-w-sm border border-orange-200 shadow-lg relative">
-            <button onclick="toggleModal('authModal', false)" class="absolute top-3 right-3 text-gray-500 hover:text-gray-700">
-                <i class="fas fa-times fa-lg"></i>
-            </button>
-            <h3 class="text-xl font-bold mb-4 text-center text-gradient">Welcome!</h3>
-            <p class="text-center text-gray-600 mb-6">Login or create an account to play and join tournaments.</p>
-
-            <div class="flex border-b border-gray-200 mb-4">
-                <button id="loginTabBtnModal" class="flex-1 py-2 text-center font-bold border-b-4 border-red-500 text-red-600">Login</button>
-                <button id="signupTabBtnModal" class="flex-1 py-2 text-center font-bold text-gray-400 border-b-4 border-transparent">Sign Up</button>
-            </div>
-            <form id="loginFormModal" class="space-y-4">
-                <input type="email" id="loginEmailModal" placeholder="Email" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
-                <input type="password" id="loginPasswordModal" placeholder="Password" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
-                <button type="submit" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-700 hover:to-yellow-600 p-3 rounded-lg font-bold shadow-md transition-all">Login</button>
-            </form>
-            <form id="signupFormModal" class="space-y-4" style="display:none;">
-                <input type="text" id="signupUsernameModal" placeholder="Username" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
-                <p id="usernameAvailability" class="text-xs mt-1"></p> <!-- For username availability feedback -->
-                <input type="email" id="signupEmailModal" placeholder="Email" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
-                <input type="password" id="signupPasswordModal" placeholder="Password (min. 6 chars)" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
-                <input type="text" id="signupReferralCodeModal" placeholder="Referral Username (Optional)" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500">
-                <button type="submit" id="signupSubmitBtn" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-700 hover:to-yellow-600 p-3 rounded-lg font-bold shadow-md transition-all">Create Account</button>
-            </form>
-        </div>
-    </div>
-
-    <div id="addMoneyModal" class="modal fixed inset-0 bg-black bg-opacity-70 items-center justify-center z-50">
-        <div class="bg-white p-6 rounded-lg w-11/12 max-w-sm border border-orange-200 shadow-lg">
-            <h3 class="text-xl font-bold mb-4 text-green-600">Deposit via EasyPaisa / JazzCash</h3>
-            <p class="text-sm text-gray-600 mb-4">
-                Please send the desired amount to the following number via EasyPaisa or JazzCash:<br>
-                <strong class="text-red-600 text-lg" id="admin-deposit-number">03105784772</strong><br>
-                After payment, enter the amount, Transaction ID (TID), and payment method below.
-            </p>
-            <form id="addMoneyForm" class="space-y-4">
-                <input type="number" id="add-amount" placeholder="Enter amount (PKR)" class="w-full p-3 bg-orange-50 rounded border border-orange-200 focus:outline-none focus:border-red-500" required>
-                <input type="text" id="deposit-tid" placeholder="Enter Transaction ID (TID)" class="w-full p-3 bg-orange-50 rounded border border-orange-200 focus:outline-none focus:border-red-500" required>
-                <input type="text" id="deposit-source-type" placeholder="EasyPaisa / JazzCash (e.g., EasyPaisa)" class="w-full p-3 bg-orange-50 rounded border border-orange-200 focus:outline-none focus:border-red-500" required>
-                
-                <div class="flex items-center mt-4">
-                    <input type="checkbox" id="acceptDepositRules" class="mr-2" required>
-                    <label for="acceptDepositRules" class="text-sm text-gray-700">I accept the <a href="#" onclick="showPolicySection('deposit_rules'); return false;" class="text-blue-600 underline font-semibold">Deposit Rules</a></label>
-                </div>
-
-                <button type="submit" class="w-full text-white bg-gradient-to-r from-green-500 to-green-600 p-3 rounded font-semibold shadow-md">Confirm Deposit</button>
-                <button type="button" onclick="toggleModal('addMoneyModal', false)" class="w-full bg-gray-200 text-gray-700 p-3 rounded font-semibold">Cancel</button>
-            </form>
-        </div>
-    </div>
-
-    <div id="withdrawMoneyModal" class="modal fixed inset-0 bg-black bg-opacity-70 items-center justify-center z-50">
-        <div class="bg-white p-6 rounded-lg w-11/12 max-w-sm border border-orange-200 shadow-lg">
-
-            <h3 class="text-xl font-bold mb-4 text-red-600">Withdraw via EasyPaisa / JazzCash</h3>
-
-            <form id="withdrawMoneyForm" class="space-y-4">
-                <input type="number" id="withdraw-amount" placeholder="Enter amount min 120 (PKR)" class="w-full p-3 bg-orange-50 rounded border border-orange-200" required>
-                <input type="text" id="withdraw-number" placeholder="EasyPaisa / JazzCash Number" class="w-full p-3 bg-orange-50 rounded border border-orange-200" required>
-                <input type="text" id="withdraw-owner-name" placeholder="Owner Name" class="w-full p-3 bg-orange-50 rounded border border-orange-200" required>
-                <input type="text" id="withdraw-account-type" placeholder="EasyPaisa / JazzCash (e.g., EasyPaisa)" class="w-full p-3 bg-orange-50 rounded border border-orange-200" required>
-
-                <p class="text-sm text-gray-600 mt-4">
-                    Withdrawal Rules<br><br>
-                    1️⃣ Withdrawal sirf un users ke liye available hai jo Live Tournament Match play karte hain.<br><br>
-                    ✅Withdrawal ke liye 5 referrals zaroori hain. Referral tab count hoga jab koi aapke code سے signup karke 50 rupees deposit kare.
-                </p>
-
-                <div class="flex items-center mt-4">
-                    <input type="checkbox" id="acceptWithdrawalRules" class="mr-2" required>
-                    <label for="acceptWithdrawalRules" class="text-sm text-gray-700">I accept the <a href="#" onclick="showPolicySection('withdrawal_rules'); return false;" class="text-blue-600 underline font-semibold">Withdrawal Rules</a></label>
-                </div>
-
-                <button type="submit" class="w-full text-white bg-gradient-to-r from-blue-500 to-blue-600 p-3 rounded font-semibold shadow-md">Request Withdrawal</button>
-                <button type="button" onclick="toggleModal('withdrawMoneyModal', false)" class="w-full bg-gray-200 text-gray-700 p-3 rounded font-semibold">Cancel</button>
-            </form>
-        </div>
-    </div>
-
-    <!-- NEW MODAL: Add New Game -->
-    <div id="addGameModal" class="modal fixed inset-0 bg-black bg-opacity-70 items-center justify-center z-50">
-        <div class="bg-white p-6 rounded-lg w-11/12 max-w-sm border border-orange-200 shadow-lg relative">
-            <button onclick="toggleModal('addGameModal', false)" class="absolute top-3 right-3 text-gray-500 hover:text-gray-700">
-                <i class="fas fa-times fa-lg"></i>
-            </button>
-            <h3 class="text-xl font-bold mb-4 text-center text-gradient">Add New Game</h3>
-
-            <!-- Policy Section (Changed to Accordion) -->
-            <details class="policy-accordion text-sm">
-                <summary>Game Submission Policy</summary>
-                <ul class="list-disc list-inside space-y-1">
-                    <li><span class="font-bold">Cost:</span> PKR 100 will be deducted from your wallet for each game submission.</li>
-                    <li><span class="font-bold">Duration:</span> Your game will be added and live for a minimum of 30 days. After this period, it may be reviewed for performance and compliance.</li>
-                    <li><span class="font-bold">No Violations:</span> Please ensure your game content and links do not violate any laws, contain adult/offensive material, or promote illegal activities. Broken or malicious links will result in immediate removal without refund.</li>
-                    <li><span class="font-bold">Review:</span> All submitted games are subject to admin review. We reserve the right to remove any game that violates our policies at any time.</li>
-                </ul>
-            </details>
-
-            <form id="addGameForm" class="space-y-4">
-                <input type="text" id="gameTitleInput" placeholder="Game Title (e.g. Ludo)" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
-                <input type="url" id="gameImageUrlInput" placeholder="Image URL (Thumbnail)" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
-                <input type="url" id="gameUrlInput" placeholder="Game URL (e.g. ludo.html)" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
-                <!-- NEW: Category Input -->
-                <input type="text" id="gameCategoryInput" placeholder="Game Category (e.g. Action, Puzzle, Betting)" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
-                <button type="submit" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-700 hover:to-yellow-600 p-3 rounded-lg font-bold shadow-md transition-all">Add Game</button>
-            </form>
-        </div>
-    </div>
-
     <div id="toast" class="fixed top-5 right-5 text-white py-2 px-4 rounded-lg shadow-lg" style="display: none; z-index: 1000;"></div>
 
-    <!-- NEW MODAL: Contact Us -->
-    <div id="contactUsModal" class="modal fixed inset-0 bg-black bg-opacity-70 items-center justify-center z-50">
+    <!-- MODAL: Edit Game -->
+    <div id="editGameModal" class="modal fixed inset-0 bg-black bg-opacity-70 items-center justify-center z-50">
         <div class="bg-white p-6 rounded-lg w-11/12 max-w-sm border border-orange-200 shadow-lg relative">
-            <button onclick="toggleModal('contactUsModal', false)" class="absolute top-3 right-3 text-gray-500 hover:text-gray-700">
+            <button onclick="toggleModal('editGameModal', false)" class="absolute top-3 right-3 text-gray-500 hover:text-gray-700">
                 <i class="fas fa-times fa-lg"></i>
             </button>
-            <h3 class="text-xl font-bold mb-4 text-center text-gradient">Contact Us</h3>
-            <p class="text-center text-gray-600 mb-6">Have a question or need support? Send us a message!</p>
-            <form id="contactUsForm" class="space-y-4">
-                <input type="text" id="contactSubject" placeholder="Subject" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
-                <textarea id="contactMessage" placeholder="Your Message" rows="5" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required></textarea>
-                <button type="submit" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-700 hover:to-yellow-600 p-3 rounded-lg font-bold shadow-md transition-all">Send Message</button>
+            <h3 class="text-xl font-bold mb-4 text-center text-gradient">Edit Game</h3>
+            <form id="editGameForm" class="space-y-4">
+                <input type="hidden" id="edit-game-id">
+                <input type="hidden" id="edit-game-created-by"> 
+                <input type="text" id="edit-g-title" placeholder="Game Title" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                <input type="url" id="edit-g-image" placeholder="Image URL" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                <input type="url" id="edit-g-url" placeholder="Game URL" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                <!-- NEW: Category input for Edit Game Modal -->
+                <input type="text" id="edit-g-category" placeholder="Game Category (e.g. Action, Puzzle)" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                <button type="submit" class="w-full text-white bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 p-3 rounded-lg font-bold shadow-md transition-all">Save Changes</button>
             </form>
         </div>
     </div>
 
-    <!-- NEW MODAL: Game Deletion Notification (Persistent) -->
-    <div id="gameDeletionNotificationModal" class="modal fixed inset-0 bg-black bg-opacity-70 items-center justify-center z-50">
-        <div class="bg-white p-6 rounded-lg w-11/12 max-w-sm border border-red-200 shadow-lg relative">
-            <button onclick="toggleModal('gameDeletionNotificationModal', false)" class="absolute top-3 right-3 text-gray-500 hover:text-gray-700">
+    <!-- NEW MODAL: Delete Game Confirmation -->
+    <div id="deleteGameConfirmationModal" class="modal fixed inset-0 bg-black bg-opacity-70 items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-lg w-11/12 max-w-sm border border-orange-200 shadow-lg relative">
+            <button onclick="toggleModal('deleteGameConfirmationModal', false)" class="absolute top-3 right-3 text-gray-500 hover:text-gray-700">
                 <i class="fas fa-times fa-lg"></i>
             </button>
-            <h3 class="text-xl font-bold mb-4 text-center text-red-600"><i class="fas fa-exclamation-circle mr-2"></i>Important Notification!</h3>
-            <div class="space-y-4">
-                <p class="text-gray-700 font-semibold" id="deletion-notification-title"></p>
-                <p class="text-gray-600" id="deletion-notification-message"></p>
-            </div>
+            <h3 class="text-xl font-bold mb-4 text-center text-gradient">Delete Game: <span id="delete-game-title-display"></span></h3>
+            <p class="text-gray-600 mb-4">Are you sure you want to delete this game? This action cannot be undone.</p>
+            <form id="confirmDeleteGameForm" class="space-y-4">
+                <input type="hidden" id="delete-game-id-hidden">
+                <input type="hidden" id="delete-game-creator-id-hidden">
+                <textarea id="delete-game-reason" rows="4" placeholder="Reason for deletion (this will be sent to the user, optional)" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500"></textarea>
+                <button type="submit" class="w-full text-white bg-red-600 hover:bg-red-700 p-3 rounded-lg font-bold shadow-md transition-all">Confirm Delete</button>
+                <button type="button" onclick="toggleModal('deleteGameConfirmationModal', false)" class="w-full bg-gray-200 text-gray-700 p-3 rounded-lg font-bold shadow-md transition-all">Cancel</button>
+            </form>
         </div>
     </div>
 
-    <!-- Link to the separate script.js file -->
-    <script src="script.js"></script>
+
+    <!-- MODAL: Edit User -->
+    <div id="editUserModal" class="modal fixed inset-0 bg-black bg-opacity-70 items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-lg w-11/12 max-w-sm border border-orange-200 shadow-lg relative">
+            <button onclick="toggleModal('editUserModal', false)" class="absolute top-3 right-3 text-gray-500 hover:text-gray-700">
+                <i class="fas fa-times fa-lg"></i>
+            </button>
+            <h3 class="text-xl font-bold mb-4 text-center text-gradient">Edit User Profile</h3>
+            <form id="editUserForm" class="space-y-4">
+                <input type="hidden" id="edit-user-uid">
+                <label class="block"><span class="text-gray-700 text-sm">Username:</span>
+                    <input type="text" id="edit-user-username" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                </label>
+                <label class="block"><span class="text-gray-700 text-sm">Email:</span>
+                    <input type="email" id="edit-user-email" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" disabled>
+                </label>
+                <label class="block"><span class="text-gray-700 text-sm">Current Balance:</span>
+                    <input type="text" id="edit-user-balance-display" class="w-full p-3 bg-gray-50 rounded border border-gray-200" disabled>
+                </label>
+                <label class="block"><span class="text-gray-700 text-sm">Adjust Balance (Add/Deduct):</span>
+                    <input type="number" id="edit-user-balance-adjust" placeholder="Enter amount to add or deduct" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500">
+                </label>
+                <label class="block"><span class="text-gray-700 text-sm">Reason for adjustment:</span>
+                    <textarea id="edit-user-balance-reason" placeholder="Required if adjusting balance" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500"></textarea>
+                </label>
+                <div class="flex items-center justify-between py-2">
+                    <span class="text-gray-700 text-sm font-semibold">Account Locked:</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="edit-user-locked-status" onchange="toggleLockReasonInput()">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div id="edit-user-lock-reason-group" class="block">
+                    <label class="block"><span class="text-gray-700 text-sm">Lock/Unlock Reason:</span>
+                        <textarea id="edit-user-lock-reason" placeholder="Required if changing lock status" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500"></textarea>
+                    </label>
+                </div>
+                <button type="submit" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-700 hover:to-yellow-600 p-3 rounded-lg font-bold shadow-md transition-all">Save User Changes</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: Edit App Content -->
+    <div id="editAppContentModal" class="modal fixed inset-0 bg-black bg-opacity-70 items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-lg w-11/12 max-w-sm border border-orange-200 shadow-lg relative">
+            <button onclick="toggleModal('editAppContentModal', false)" class="absolute top-3 right-3 text-gray-500 hover:text-gray-700">
+                <i class="fas fa-times fa-lg"></i>
+            </button>
+            <h3 class="text-xl font-bold mb-4 text-center text-gradient" id="edit-content-title-display">Edit Content</h3>
+            <form id="editAppContentForm" class="space-y-4">
+                <input type="hidden" id="edit-content-key">
+                <label class="block"><span class="text-gray-700 text-sm">Title (for display):</span>
+                    <input type="text" id="edit-content-display-title" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                </label>
+                <label class="block"><span class="text-gray-700 text-sm">Content:</span>
+                    <textarea id="edit-content-body" rows="10" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required></textarea>
+                </label>
+                <button type="submit" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-700 hover:to-yellow-600 p-3 rounded-lg font-bold shadow-md transition-all">Save Content</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: View/Reply Contact Message -->
+    <div id="viewContactMessageModal" class="modal fixed inset-0 bg-black bg-opacity-70 items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-lg w-11/12 max-w-sm border border-orange-200 shadow-lg relative">
+            <button onclick="toggleModal('viewContactMessageModal', false)" class="absolute top-3 right-3 text-gray-500 hover:text-gray-700">
+                <i class="fas fa-times fa-lg"></i>
+            </button>
+            <h3 class="text-xl font-bold mb-4 text-center text-gradient">View & Reply Message</h3>
+            <div class="space-y-3 mb-4">
+                <p class="text-sm"><strong class="text-gray-700">From:</strong> <span id="msg-user-info"></span></p>
+                <p class="text-sm"><strong class="text-gray-700">Subject:</strong> <span id="msg-subject"></span></p>
+                <p class="text-sm bg-gray-50 p-3 rounded border border-gray-200" id="msg-body"></p>
+                <p class="text-xs text-gray-500" id="msg-timestamp"></p>
+                <div id="msg-admin-reply-display" class="bg-blue-50 p-3 rounded border border-blue-200 text-sm" style="display:none;">
+                    <strong class="text-blue-700">Your Reply:</strong> <span id="msg-admin-reply-text"></span>
+                </div>
+            </div>
+            <form id="replyContactMessageForm" class="space-y-4">
+                <input type="hidden" id="reply-message-id">
+                <input type="hidden" id="reply-user-id">
+                <textarea id="reply-message-body" rows="5" placeholder="Type your reply here..." class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required></textarea>
+                <button type="submit" class="w-full text-white bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 p-3 rounded-lg font-bold shadow-md transition-all">Send Reply</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: Edit Video Section -->
+    <div id="editVideoSectionModal" class="modal fixed inset-0 bg-black bg-opacity-70 items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-lg w-11/12 max-w-sm border border-orange-200 shadow-lg relative">
+            <button onclick="toggleModal('editVideoSectionModal', false)" class="absolute top-3 right-3 text-gray-500 hover:text-gray-700">
+                <i class="fas fa-times fa-lg"></i>
+            </button>
+            <h3 class="text-xl font-bold mb-4 text-center text-gradient">Edit Video Section</h3>
+            <form id="editVideoSectionForm" class="space-y-4">
+                <input type="hidden" id="edit-video-section-id">
+                <label class="block"><span class="text-gray-700 text-sm">Title:</span>
+                    <input type="text" id="edit-video-section-title" placeholder="Section Title" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                </label>
+                <label class="block"><span class="text-gray-700 text-sm">Description:</span>
+                    <textarea id="edit-video-section-description" rows="3" placeholder="Section Description (optional)" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500"></textarea>
+                </label>
+                <label class="block"><span class="text-gray-700 text-sm">YouTube Embed URL:</span>
+                    <input type="url" id="edit-video-section-url" placeholder="e.g., https://www.youtube.com/embed/VIDEO_ID" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                </label>
+                <div class="grid grid-cols-2 gap-4">
+                    <label class="block"><span class="text-gray-700 text-sm">Watch Time (s):</span>
+                        <input type="number" id="edit-video-section-time" placeholder="e.g., 60" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                    </label>
+                    <label class="block"><span class="text-gray-700 text-sm">Reward (PKR):</span>
+                        <input type="number" id="edit-video-section-reward" placeholder="e.g., 5" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                    </label>
+                </div>
+                <button type="submit" class="w-full text-white bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 p-3 rounded-lg font-bold shadow-md transition-all">Save Changes</button>
+            </form>
+        </div>
+    </div>
+
+
+    <script>
+        document.addEventListener('contextmenu', event => event.preventDefault());
+
+       const firebaseConfig = {
+            apiKey: "AIzaSyDR2OugzoVNnKN6OUKsPxC9ajldlhanteE",
+            authDomain: "tournament-af6dd.firebaseapp.com",
+            projectId: "tournament-af6dd",
+            storageBucket: "tournament-af6dd.firebasestorage.app",
+            messagingSenderId: "726964405659",
+            appId: "1:726964405659:web:d03f72c2d6f8721bc98d3e",
+            measurementId: "G-GK0JNQ44N7"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.database();
+
+        let currentAdminData = null;
+        let currentTournamentId = null;
+        let allUsersData = {}; // GLOBAL: Stores all users for client-side filtering
+
+        function toggleModal(modalId, show) { document.getElementById(modalId).classList.toggle('active', show); }
+
+        function navigateTo(pageId, data = null) {
+            document.getElementById('initial-loader').style.display = 'none';
+            if (pageId === 'adminManageTournamentPage' && data) currentTournamentId = data.tournamentId;
+            
+            // Store referrer UID for adminViewReferredUsersPage
+            if (pageId === 'adminViewReferredUsersPage' && data) {
+                localStorage.setItem('adminReferrerUid', data.referrerUid);
+            } else if (pageId !== 'adminViewReferredUsersPage') {
+                localStorage.removeItem('adminReferrerUid');
+            }
+
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            const targetPage = document.getElementById(pageId);
+            if (targetPage) {
+                targetPage.classList.add('active');
+                loadPageContent(pageId);
+            }
+            const nav = document.getElementById('admin-bottom-nav');
+            if(nav) nav.style.display = auth.currentUser ? 'block' : 'none'; 
+            
+            document.querySelectorAll('.admin-nav-item').forEach(item => {
+                const isActive = item.getAttribute('onclick').includes(pageId);
+                item.className = 'admin-nav-item text-center transition-all duration-300';
+                if (isActive) {
+                    item.classList.add('text-white', 'scale-125', '-translate-y-1', 'font-bold', 'drop-shadow-md');
+                } else {
+                    item.classList.add('text-white/60', 'scale-100');
+                }
+            });
+            window.scrollTo(0, 0);
+        }
+
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `fixed top-5 right-5 text-white py-2 px-4 rounded-lg shadow-lg ${isError ? 'bg-gradient-to-r from-red-600 to-red-400' : 'bg-gradient-to-r from-green-500 to-green-600'}`;
+            toast.style.display = 'block';
+            setTimeout(() => { toast.style.display = 'none'; }, 3000);
+        }
+
+        function formatCurrency(amount) {
+            return `PKR ${new Intl.NumberFormat('en-PK', { minimumFractionDigits: 0 }).format(amount)}`;
+        }
+
+        auth.onAuthStateChanged(async user => {
+            document.getElementById('initial-loader').style.display = 'none'; 
+            if (user) {
+                const adminSnap = await db.ref('admins/' + user.uid).once('value');
+                if (adminSnap.exists() && adminSnap.val() === true) {
+                    currentAdminData = { uid: user.uid, email: user.email };
+                    navigateTo('adminDashboardPage');
+                    document.getElementById('admin-bottom-nav').style.display = 'block';
+                } else {
+                    showToast("Access Denied: You are not an administrator.", true);
+                    auth.signOut();
+                    navigateTo('adminLoginPage');
+                    document.getElementById('admin-bottom-nav').style.display = 'none'; 
+                }
+            } else {
+                currentAdminData = null;
+                navigateTo('adminLoginPage');
+                document.getElementById('admin-bottom-nav').style.display = 'none';
+            }
+        });
+        
+        function loadPageContent(pageId) {
+            const pageContainer = document.getElementById(pageId);
+            if (!pageContainer) return;
+            switch (pageId) {
+                case 'adminLoginPage': renderAdminLoginPage(pageContainer); break;
+                case 'adminDashboardPage': renderAdminDashboardPage(pageContainer); break;
+                case 'adminGamesPage': renderAdminGamesPage(pageContainer); break;
+                case 'adminTournamentPage': renderAdminTournamentPage(pageContainer); break;
+                case 'adminManageTournamentPage': renderAdminManageTournamentPage(pageContainer); break;
+                case 'adminUsersPage': renderAdminUsersPage(pageContainer); break; 
+                case 'adminSettingsPage': renderAdminSettingsPage(pageContainer); break; 
+                case 'adminManageUsersPage': renderAdminManageUsersPage(pageContainer); break; 
+                case 'adminAppContentPage': renderAdminAppContentPage(pageContainer); break; 
+                case 'adminContactMessagesPage': renderAdminContactMessagesPage(pageContainer); break; 
+                case 'adminReferralsPage': renderAdminReferralsPage(pageContainer); break; 
+                case 'adminViewReferredUsersPage': renderAdminViewReferredUsersPage(pageContainer); break; 
+                // NEW PAGES FOR DATABASE NODES
+                case 'adminAppSettingsPage': renderAdminAppSettingsPage(pageContainer); break;
+                case 'adminLiveGamePage': renderAdminLiveGamePage(pageContainer); break;
+                case 'adminGameLogsPage': renderAdminGameLogsPage(pageContainer); break;
+                case 'adminTransactionsPage': renderAdminTransactionsPage(pageContainer); break;
+                case 'adminVideoContentPage': renderAdminVideoContentPage(pageContainer); break;
+                case 'adminVideoWatchLogsPage': renderAdminVideoWatchLogsPage(pageContainer); break;
+                case 'adminWorkerEarningsPage': renderAdminWorkerEarningsPage(pageContainer); break;
+            }
+        }
+        
+        function renderAdminLoginPage(container) {
+            container.innerHTML = `
+                <div class="p-6 h-screen flex flex-col justify-center bg-orange-50">
+                    <h1 class="text-4xl font-black text-center mb-2 text-gradient">Admin Panel</h1>
+                    <div class="bg-white p-6 rounded-lg shadow-lg border border-orange-200">
+                        <form id="adminLoginForm" class="space-y-4">
+                            <input type="email" id="adminLoginEmail" placeholder="Email" class="w-full p-3 bg-gray-50 rounded border border-gray-300 focus:border-red-500" required>
+                            <input type="password" id="adminLoginPassword" placeholder="Password" class="w-full p-3 bg-gray-50 rounded border border-gray-300 focus:border-red-500" required>
+                            <button type="submit" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-700 hover:to-yellow-600 p-3 rounded font-bold shadow-md">Login</button>
+                        </form>
+                    </div>
+                </div>`;
+            document.getElementById('adminLoginForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                auth.signInWithEmailAndPassword(e.target.adminLoginEmail.value, e.target.adminLoginPassword.value).catch(err => showToast(err.message, true));
+            });
+        }
+
+        async function renderAdminDashboardPage(container) {
+            container.innerHTML = `<div class="p-4 space-y-6 bg-orange-50 min-h-screen">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-2xl font-black text-gray-800">Dashboard</h2>
+                    <button onclick="logout()" class="text-sm text-white bg-red-600 hover:bg-red-700 px-4 py-2 rounded-full font-bold shadow-md transition-transform transform active:scale-95">
+                        <i class="fas fa-sign-out-alt mr-1"></i> Logout
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl p-5 text-white shadow-lg relative overflow-hidden transform transition hover:scale-[1.02]">
+                        <div class="relative z-10"><p class="text-xs font-bold uppercase opacity-80 tracking-wider">Total Users</p><p class="text-3xl font-black mt-1" id="total-users">...</p></div>
+                        <i class="fas fa-users absolute -right-2 -bottom-4 text-6xl opacity-20 rotate-12"></i>
+                    </div>
+                    <div class="bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl p-5 text-white shadow-lg relative overflow-hidden transform transition hover:scale-[1.02]">
+                        <div class="relative z-10"><p class="text-xs font-bold uppercase opacity-80 tracking-wider">Matches</p><p class="text-3xl font-black mt-1" id="total-tournaments">...</p></div>
+                        <i class="fas fa-gamepad absolute -right-2 -bottom-4 text-6xl opacity-20 rotate-12"></i>
+                    </div>
+                    <div class="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl p-5 text-white shadow-lg relative overflow-hidden transform transition hover:scale-[1.02]">
+                        <div class="relative z-10"><p class="text-xs font-bold uppercase opacity-80 tracking-wider">Prize Given</p><p class="text-2xl font-black mt-1" id="total-prize">...</p></div>
+                        <i class="fas fa-trophy absolute -right-2 -bottom-4 text-6xl opacity-20 rotate-12"></i>
+                    </div>
+                    <div class="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl p-5 text-white shadow-lg relative overflow-hidden transform transition hover:scale-[1.02]">
+                        <div class="relative z-10"><p class="text-xs font-bold uppercase opacity-80 tracking-wider">Revenue</p><p class="text-2xl font-black mt-1" id="total-revenue">...</p></div>
+                        <i class="fas fa-chart-line absolute -right-2 -bottom-4 text-6xl opacity-20 rotate-12"></i>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl shadow-md border border-orange-100">
+                    <h3 class="font-bold text-gray-700 mb-3 text-sm uppercase tracking-wide">Quick Actions</h3>
+                    <div class="flex gap-2">
+                        <button onclick="navigateTo('adminTournamentPage')" class="flex-1 bg-gray-50 hover:bg-gray-100 text-gray-700 p-3 rounded-lg border border-gray-200 font-semibold text-sm transition">
+                            <i class="fas fa-plus-circle text-red-500 block text-lg mb-1"></i> New Match
+                        </button>
+                        <button onclick="navigateTo('adminGamesPage')" class="flex-1 bg-gray-50 hover:bg-gray-100 text-gray-700 p-3 rounded-lg border border-gray-200 font-semibold text-sm transition">
+                            <i class="fas fa-gamepad text-yellow-500 block text-lg mb-1"></i> Manage Games
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl shadow-md border border-green-100">
+                    <h3 class="font-bold text-lg mb-3 text-green-700"><i class="fas fa-money-check-alt mr-2"></i>New Deposit Requests</h3>
+                    <div id="pending-deposits-list" class="space-y-3">
+                        <p class="text-center text-gray-400 italic">Loading deposit requests...</p>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl shadow-md border border-blue-100">
+                    <h3 class="font-bold text-lg mb-3 text-blue-700"><i class="fas fa-hand-holding-usd mr-2"></i>New Withdrawal Requests</h3>
+                    <div id="pending-withdrawals-list" class="space-y-3">
+                        <p class="text-center text-gray-400 italic">Loading withdrawal requests...</p>
+                    </div>
+                </div>
+
+            </div>`;
+            const users = (await db.ref('users').once('value')).numChildren();
+            const tournamentsSnapshot = await db.ref('tournaments').once('value');
+            document.getElementById('total-users').textContent = users;
+            document.getElementById('total-tournaments').textContent = tournamentsSnapshot.numChildren();
+            const tournaments = tournamentsSnapshot.val() || {};
+            let totalPrize = 0, totalRevenue = 0;
+            Object.values(tournaments).forEach(t => {
+                if (t.status === 'Completed' && t.winner_id) {
+                    totalPrize += t.prize_pool;
+                    const participantsCount = Object.keys(t.participants || {}).length;
+                    const commissionRate = (t.commission_percentage !== undefined && !isNaN(t.commission_percentage)) ? (t.commission_percentage / 100) : 0;
+                    totalRevenue += (t.entry_fee * participantsCount) * commissionRate;
+                }
+            });
+            document.getElementById('total-prize').textContent = formatCurrency(totalPrize);
+            document.getElementById('total-revenue').textContent = formatCurrency(totalRevenue);
+
+            db.ref('pending_deposits').on('value', async (snapshot) => {
+                const deposits = snapshot.val();
+                const listEl = document.getElementById('pending-deposits-list');
+                if (!deposits) { listEl.innerHTML = `<p class="text-center text-gray-400 italic">No pending deposit requests.</p>`; return; }
+                
+                let pendingHtml = '';
+                for (const userId in deposits) {
+                    for (const depositId in deposits[userId]) {
+                        const dep = deposits[userId][depositId];
+                        if (dep.status === 'pending') {
+                            const userSnap = await db.ref(`users/${userId}`).once('value');
+                            const user = userSnap.val() || { username: 'Unknown User', email: 'N/A' };
+                            pendingHtml += `
+                                <div class="bg-yellow-50 p-3 rounded-lg shadow-sm border border-yellow-200">
+                                    <p class="font-bold text-yellow-800">Deposit: ${formatCurrency(dep.amount)}</p>
+                                    <p class="text-sm text-gray-700">User: ${user.username} (${user.email})</p>
+                                    <p class="text-sm text-gray-700">Method: <strong class="text-blue-600">${dep.source_details || 'N/A'}</strong></p>
+                                    <p class="text-sm text-gray-700">TID: <strong class="text-red-600">${dep.tid}</strong></p>
+                                    <p class="text-xs text-gray-500">${new Date(dep.created_at).toLocaleString()}</p>
+                                    <div class="flex gap-2 mt-2">
+                                        <button onclick="approveDeposit('${userId}', '${depositId}', ${dep.amount})" class="flex-1 text-white bg-green-500 hover:bg-green-600 px-3 py-1 rounded-md text-sm font-semibold">Approve</button>
+                                        <button onclick="rejectDeposit('${userId}', '${depositId}')" class="flex-1 text-red-500 bg-red-100 hover:bg-red-200 px-3 py-1 rounded-md text-sm font-semibold">Reject</button>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                    }
+                }
+                listEl.innerHTML = pendingHtml || `<p class="text-center text-gray-400 italic">No pending deposit requests.</p>`;
+            });
+
+            db.ref('pending_withdrawals').on('value', async (snapshot) => {
+                const withdrawalsByUser = snapshot.val();
+                const listEl = document.getElementById('pending-withdrawals-list');
+                if (!withdrawalsByUser) { listEl.innerHTML = `<p class="text-center text-gray-400 italic">No pending withdrawal requests.</p>`; return; }
+
+                let pendingHtml = '';
+                for (const userId in withdrawalsByUser) {
+                    for (const withdrawalId in withdrawalsByUser[userId]) {
+                        const withdrawal = withdrawalsByUser[userId][withdrawalId];
+                        if (withdrawal.status === 'pending') {
+                            const userSnap = await db.ref(`users/${userId}`).once('value');
+                            const user = userSnap.val() || { username: 'Unknown User', email: 'N/A' };
+                            pendingHtml += `
+                                <div class="bg-blue-50 p-3 rounded-lg shadow-sm border border-blue-200">
+                                    <p class="font-bold text-blue-800">Withdrawal: ${formatCurrency(withdrawal.amount)}</p>
+                                    <p class="text-sm text-gray-700">User: ${user.username} (${user.email})</p>
+                                    <p class="text-sm text-gray-700">Account: <strong class="text-red-600">${withdrawal.withdrawal_account_type || 'N/A'} - ${withdrawal.withdrawal_account}</strong></p>
+                                    <p class="text-sm text-gray-700">Owner: <strong class="text-gray-800">${withdrawal.withdrawal_owner_name || 'N/A'}</strong></p>
+                                    <p class="text-xs text-gray-500">${new Date(withdrawal.created_at).toLocaleString()}</p>
+                                    <div class="flex gap-2 mt-2">
+                                        <button onclick="completeWithdrawal('${userId}', '${withdrawalId}', '${withdrawal.transaction_id}')" class="flex-1 text-white bg-green-500 hover:bg-green-600 px-3 py-1 rounded-md text-sm font-semibold">Mark as Done</button>
+                                        <button onclick="cancelWithdrawal('${userId}', '${withdrawalId}', '${withdrawal.transaction_id}', ${withdrawal.amount})" class="flex-1 text-red-500 bg-red-100 hover:bg-red-200 px-3 py-1 rounded-md text-sm font-semibold">Cancel</button>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                    }
+                }
+                listEl.innerHTML = pendingHtml || `<p class="text-center text-gray-400 italic">No pending withdrawal requests.</p>`;
+            });
+        }
+
+        async function approveDeposit(userId, depositId, amount) {
+            if (confirm(`Approve deposit of ${formatCurrency(amount)} for this user?`)) {
+                const userWalletRef = db.ref(`users/${userId}/wallet_balance`);
+                userWalletRef.transaction((currentBalance) => {
+                    return (currentBalance || 0) + amount;
+                }, async (error, committed, snapshot) => {
+                    if (error) {
+                        showToast('Deposit approval failed: ' + error.message, true);
+                    } else if (committed) {
+                        await db.ref(`pending_deposits/${userId}/${depositId}`).update({ status: 'approved', approved_at: new Date().toISOString() });
+                        await db.ref(`transactions/${userId}`).push({
+                            amount: amount,
+                            type: 'credit',
+                            description: 'EasyPaisa/JazzCash Deposit (Approved)',
+                            created_at: new Date().toISOString()
+                        });
+                        showToast('Deposit approved and wallet updated!');
+                    }
+                });
+            }
+        }
+
+        async function rejectDeposit(userId, depositId) {
+            if (confirm('Reject this deposit request?')) {
+                await db.ref(`pending_deposits/${userId}/${depositId}`).update({ status: 'rejected', rejected_at: new Date().toISOString() });
+                showToast('Deposit request rejected.');
+            }
+        }
+
+        async function completeWithdrawal(userId, withdrawalId, transactionId) {
+            if (confirm('Mark this withdrawal as completed (money sent)?')) {
+                const updates = {};
+                updates[`/pending_withdrawals/${userId}/${withdrawalId}/status`] = 'completed';
+                updates[`/pending_withdrawals/${userId}/${withdrawalId}/completed_at`] = new Date().toISOString();
+                // Note: The transaction for the withdrawal debit is created on the user side when they request it.
+                // We just update its status here.
+                updates[`/transactions/${userId}/${transactionId}/status`] = 'completed';
+                updates[`/transactions/${userId}/${transactionId}/completed_at`] = new Date().toISOString();
+                updates[`/transactions/${userId}/${transactionId}/description`] = 'Withdrawal Completed'; 
+
+                await db.ref().update(updates);
+                showToast('Withdrawal marked as completed!');
+            }
+        }
+
+        async function cancelWithdrawal(userId, withdrawalId, transactionId, amount) {
+            if (confirm('Cancel this withdrawal and refund the money to the user?')) {
+                const userWalletRef = db.ref(`users/${userId}/wallet_balance`);
+                userWalletRef.transaction((currentBalance) => {
+                    return (currentBalance || 0) + amount; // Refund the amount
+                }, async (error, committed, snapshot) => {
+                    if (error) {
+                        showToast('Withdrawal cancellation failed: ' + error.message, true);
+                    } else if (committed) {
+                        const updates = {};
+                        updates[`/pending_withdrawals/${userId}/${withdrawalId}/status`] = 'cancelled';
+                        updates[`/pending_withdrawals/${userId}/${withdrawalId}/cancelled_at`] = new Date().toISOString();
+                        // Update the transaction status and description
+                        updates[`/transactions/${userId}/${transactionId}/status`] = 'cancelled';
+                        updates[`/transactions/${userId}/${transactionId}/cancelled_at`] = new Date().toISOString();
+                        updates[`/transactions/${userId}/${transactionId}/description`] = `Withdrawal Cancelled (Refunded ${formatCurrency(amount)})`;
+
+                        await db.ref().update(updates);
+                        showToast('Withdrawal cancelled and money refunded to user.');
+                    }
+                });
+            }
+        }
+
+        // Helper function to escape strings for JavaScript in HTML attribute context
+        function escapeJsStringForHtmlAttribute(s) {
+            const str = String(s || '');
+            return str.replace(/\\/g, '\\\\')
+                      .replace(/'/g, '\\\'')
+                      .replace(/"/g, '&quot;')
+                      .replace(/\n/g, '\\n')
+                      .replace(/\r/g, '\\r');
+        }
+
+        async function renderAdminGamesPage(container) {
+            container.innerHTML = `
+                <div class="p-4 space-y-6 bg-orange-50 min-h-screen">
+                    <h2 class="text-2xl font-black text-gray-800">Manage Games</h2>
+                    
+                    <div class="bg-white p-4 rounded-xl shadow-md border border-orange-100">
+                        <h3 class="font-bold text-lg mb-3 text-red-600">Admin-Add New Game</h3>
+                        <form id="addGameForm" class="space-y-3">
+                            <input type="text" id="g-title" placeholder="Game Title (e.g. Ludo)" class="w-full p-2 bg-gray-50 rounded border border-gray-200" required>
+                            <input type="text" id="g-image" placeholder="Image URL (Thumbnail)" class="w-full p-2 bg-gray-50 rounded border border-gray-200" required>
+                            <input type="text" id="g-url" placeholder="Game URL (e.g. ludo.html)" class="w-full p-2 bg-gray-50 rounded border border-gray-200" required>
+                            <input type="text" id="g-category" placeholder="Game Category (e.g. Action, Puzzle)" class="w-full p-2 bg-gray-50 rounded border border-gray-200" required>
+                            <button type="submit" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 p-2 rounded-lg font-bold">Add Game</button>
+                        </form>
+                    </div>
+
+                    <h3 class="font-bold text-lg text-gray-700 mt-6">All Live Games (Grouped by Category)</h3>
+                    <div id="all-games-list-admin" class="space-y-6">
+                        <p class="text-center text-gray-400 italic">Loading games...</p>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('addGameForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const gameTitle = document.getElementById('g-title').value;
+                const newGame = {
+                    title: gameTitle,
+                    image_url: document.getElementById('g-image').value,
+                    game_url: document.getElementById('g-url').value,
+                    category: document.getElementById('g-category').value.trim(), 
+                    created_by: currentAdminData.uid, 
+                    created_at: new Date().toISOString()
+                };
+
+                try {
+                    await db.ref('games').push(newGame);
+                    showToast('Admin game added successfully!');
+                    e.target.reset();
+
+                    // NEW: Send notification to all users about new game
+                    const allUsersSnapshot = await db.ref('users').once('value');
+                    const allUsers = allUsersSnapshot.val();
+                    if (allUsers) {
+                        const notificationPromises = [];
+                        for (const userId in allUsers) {
+                            notificationPromises.push(
+                                db.ref(`notifications/${userId}`).push({
+                                    title: 'New Game Added! 🎮',
+                                    message: `A brand new game, "${gameTitle}", has been added! Check it out now.`,
+                                    timestamp: new Date().toISOString(),
+                                    status: 'unread',
+                                    type: 'new_game_added'
+                                })
+                            );
+                        }
+                        await Promise.all(notificationPromises);
+                        console.log(`Sent "New Game Added" notification to ${Object.keys(allUsers).length} users.`);
+                    }
+
+                } catch (error) {
+                    console.error("Error adding game or sending notifications:", error);
+                    showToast('Failed to add game or send notifications. ' + error.message, true);
+                }
+            });
+
+            db.ref('games').on('value', async snap => {
+                const gamesData = snap.val();
+                const allGamesListEl = document.getElementById('all-games-list-admin');
+                
+                if(!gamesData) {
+                    allGamesListEl.innerHTML = `<p class="text-center text-gray-400 italic">No games found.</p>`;
+                    return;
+                }
+
+                const allUsersSnap = await db.ref('users').once('value');
+                const allUsers = allUsersSnap.val() || {};
+
+                const groupedGames = {};
+                Object.entries(gamesData).forEach(([id, game]) => {
+                    const category = (game.category && game.category.trim()) ? game.category.trim() : 'Uncategorized';
+                    if (!groupedGames[category]) {
+                        groupedGames[category] = [];
+                    }
+                    groupedGames[category].push({ id, ...game });
+                });
+
+                let gamesHtml = '';
+                // Sort categories alphabetically, put 'Uncategorized' last if it exists
+                const sortedCategories = Object.keys(groupedGames).sort((a, b) => {
+                    if (a === 'Uncategorized') return 1;
+                    if (b === 'Uncategorized') return -1;
+                    return a.localeCompare(b);
+                });
+
+                sortedCategories.forEach(category => {
+                    gamesHtml += `<h3 class="text-xl font-bold mt-6 mb-3 text-red-700">${escapeJsStringForHtmlAttribute(category)}</h3>`;
+                    gamesHtml += `<div class="space-y-3">`; // Container for games within this category
+
+                    // Sort games within each category by title
+                    groupedGames[category].sort((a, b) => a.title.localeCompare(b.title));
+
+                    groupedGames[category].forEach(game => {
+                        let creatorInfo = '';
+                        let createdByUserId = game.created_by || null;
+                        let gameOriginTag = ''; 
+
+                        if (createdByUserId === currentAdminData.uid) {
+                             creatorInfo = `<p class="text-xs text-gray-600">By: <span class="font-bold text-blue-600">Admin</span></p>`;
+                             gameOriginTag = `<span class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs font-semibold">Admin-Added</span>`;
+                        } else if (createdByUserId && allUsers[createdByUserId]) {
+                            const creator = allUsers[createdByUserId];
+                            creatorInfo = `<p class="text-xs text-gray-600">By: <span class="font-bold text-purple-600">${escapeJsStringForHtmlAttribute(creator.username)}</span> (${escapeJsStringForHtmlAttribute(creator.email)})</p>`;
+                            gameOriginTag = `<span class="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full text-xs font-semibold">User-Submitted</span>`;
+                        } else {
+                            creatorInfo = `<p class="text-xs text-gray-600">By: N/A</p>`; 
+                             gameOriginTag = `<span class="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full text-xs font-semibold">Unknown Origin</span>`;
+                        }
+                        
+                        gamesHtml += `
+                            <div class="bg-white p-3 rounded-lg shadow-sm border border-orange-100 flex flex-col gap-2">
+                                <div class="flex items-center gap-3">
+                                    <img src="${escapeJsStringForHtmlAttribute(game.image_url || 'https://via.placeholder.com/300x200?text=Game')}" class="w-12 h-12 rounded object-cover bg-gray-200">
+                                    <div class="flex-1">
+                                        <div class="flex items-center justify-between">
+                                            <h4 class="font-bold text-gray-800">${escapeJsStringForHtmlAttribute(game.title)}</h4>
+                                            ${gameOriginTag}
+                                        </div>
+                                        <p class="text-sm text-blue-500 truncate">${escapeJsStringForHtmlAttribute(game.game_url)}</p>
+                                        ${creatorInfo}
+                                    </div>
+                                </div>
+                                <div class="flex gap-2 justify-end">
+                                    <button onclick="openEditGameModal(
+                                        '${escapeJsStringForHtmlAttribute(game.id)}', 
+                                        '${escapeJsStringForHtmlAttribute(game.title)}', 
+                                        '${escapeJsStringForHtmlAttribute(game.image_url)}', 
+                                        '${escapeJsStringForHtmlAttribute(game.game_url)}', 
+                                        '${escapeJsStringForHtmlAttribute(game.category || '')}', 
+                                        '${escapeJsStringForHtmlAttribute(createdByUserId || '')}'
+                                    )" class="text-blue-500 bg-blue-50 p-2 rounded hover:bg-blue-100 text-sm"><i class="fas fa-edit mr-1"></i>Edit</button>
+                                    <button onclick="openDeleteGameModal(
+                                        '${escapeJsStringForHtmlAttribute(game.id)}', 
+                                        '${escapeJsStringForHtmlAttribute(createdByUserId || '')}', 
+                                        '${escapeJsStringForHtmlAttribute(game.title)}'
+                                    )" class="text-red-500 bg-red-50 p-2 rounded hover:bg-red-100 text-sm"><i class="fas fa-trash mr-1"></i>Delete</button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    gamesHtml += `</div>`; // End of container for games within this category
+                });
+                allGamesListEl.innerHTML = gamesHtml || `<p class="text-center text-gray-400 italic">No games found.</p>`;
+            });
+
+            document.getElementById('editGameForm').addEventListener('submit', updateGameDetails);
+            document.getElementById('confirmDeleteGameForm').addEventListener('submit', confirmDeleteGame); // NEW: Listen to new delete form
+        }
+
+        // Modified openEditGameModal to include category
+        function openEditGameModal(gameId, title, imageUrl, gameUrl, category, createdByUserId) {
+            document.getElementById('edit-game-id').value = gameId;
+            document.getElementById('edit-game-created-by').value = createdByUserId;
+            document.getElementById('edit-g-title').value = title;
+            document.getElementById('edit-g-image').value = imageUrl;
+            document.getElementById('edit-g-url').value = gameUrl;
+            document.getElementById('edit-g-category').value = category; // NEW: Set category
+            toggleModal('editGameModal', true);
+        }
+
+        async function updateGameDetails(e) {
+            e.preventDefault();
+            const gameId = document.getElementById('edit-game-id').value;
+            // const createdByUserId = document.getElementById('edit-game-created-by').value; // Not used for notifications on edit
+            const newTitle = document.getElementById('edit-g-title').value;
+            const newImageUrl = document.getElementById('edit-g-image').value;
+            const newGameUrl = document.getElementById('edit-g-url').value;
+            const newCategory = document.getElementById('edit-g-category').value.trim(); 
+
+            try {
+                await db.ref(`games/${gameId}`).update({
+                    title: newTitle,
+                    image_url: newImageUrl,
+                    game_url: newGameUrl,
+                    category: newCategory, 
+                    updated_at: new Date().toISOString()
+                });
+
+                showToast('Game updated successfully!');
+                toggleModal('editGameModal', false);
+            } catch (error) {
+                console.error("Error updating game:", error);
+                showToast('Failed to update game. ' + error.message, true);
+            }
+        }
+
+        // NEW: Function to open the delete confirmation modal
+        function openDeleteGameModal(gameId, createdByUserId, gameTitle) {
+            document.getElementById('delete-game-id-hidden').value = gameId;
+            document.getElementById('delete-game-creator-id-hidden').value = createdByUserId;
+            document.getElementById('delete-game-title-display').textContent = gameTitle;
+            document.getElementById('delete-game-reason').value = ''; // Clear previous reason
+            toggleModal('deleteGameConfirmationModal', true);
+        }
+
+        // NEW: Function to handle actual deletion from the modal
+        async function confirmDeleteGame(e) {
+            e.preventDefault();
+            const gameId = document.getElementById('delete-game-id-hidden').value;
+            const createdByUserId = document.getElementById('delete-game-creator-id-hidden').value;
+            const gameTitle = document.getElementById('delete-game-title-display').textContent;
+            const deletionReason = document.getElementById('delete-game-reason').value.trim();
+
+            try {
+                await db.ref(`games/${gameId}`).remove();
+
+                // Only send notification if it was a user-submitted game
+                if (createdByUserId && createdByUserId !== currentAdminData.uid) { 
+                    const notificationMessage = deletionReason 
+                        ? `Your game "${gameTitle}" has been removed ❌. Reason: ${deletionReason}`
+                        : `Your game "${gameTitle}" has been removed ❌. No specific reason provided.`;
+
+                    await db.ref(`notifications/${createdByUserId}`).push({
+                        title: `Game Removed: ${gameTitle}`,
+                        message: notificationMessage,
+                        timestamp: new Date().toISOString(),
+                        status: 'unread',
+                        type: 'game_deletion' // Specific type for game deletion
+                    });
+                }
+
+                showToast(`Game "${gameTitle}" deleted successfully!`);
+                toggleModal('deleteGameConfirmationModal', false); // Close the modal
+            } catch (error) {
+                console.error("Error deleting game:", error);
+                showToast('Failed to delete game. ' + error.message, true);
+            }
+        }
+
+        async function renderAdminTournamentPage(container) {
+            container.innerHTML = `<div class="p-4 space-y-6 bg-orange-50 min-h-screen">
+                <div class="bg-white p-4 rounded-xl shadow-md border border-orange-100">
+                    <h2 class="text-2xl font-black mb-4 text-gray-800">Create Match</h2>
+                    <form id="createTournamentForm" class="space-y-4">
+                        <input type="text" id="t-title" placeholder="Match Title" class="w-full p-3 bg-gray-50 rounded border border-gray-200" required>
+                        <select id="t-game-select" class="w-full p-3 bg-gray-50 rounded border border-gray-200 text-gray-700" required>
+                            <option value="">Loading Games...</option>
+                        </select>
+                        <div class="grid grid-cols-2 gap-4">
+                            <input type="number" id="t-fee" placeholder="Entry Fee (PKR)" class="w-full p-3 bg-gray-50 rounded border border-gray-200" required>
+                            <input type="number" id="t-prize" placeholder="Prize Pool (PKR)" class="w-full p-3 bg-gray-50 rounded border border-gray-200" required>
+                        </div>
+                        <input type="datetime-local" id="t-time" class="w-full p-3 bg-gray-50 rounded border border-gray-200" required>
+                        <input type="number" id="t-commission" placeholder="Commission %" class="w-full p-3 bg-gray-50 rounded border border-gray-200" required>
+                        <button type="submit" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-700 hover:to-yellow-600 p-3 rounded font-bold shadow-md">Create Match</button>
+                    </form>
+                </div>
+                <h2 class="text-xl font-bold mt-8 text-gray-700">All Matches</h2>
+                <div id="all-tournaments-list" class="space-y-3">Loading...</div>
+            </div>`;
+
+            const gameSelect = document.getElementById('t-game-select');
+            db.ref('games').once('value', snap => {
+                const games = snap.val();
+                if(!games) {
+                    gameSelect.innerHTML = `<option value="">No Games Added. Go to 'Games' tab.</option>`;
+                    return;
+                }
+                // Group games by category for the dropdown
+                const groupedGames = {};
+                Object.entries(games).forEach(([id, game]) => {
+                    const category = (game.category && game.category.trim()) ? game.category.trim() : 'Uncategorized';
+                    if (!groupedGames[category]) {
+                        groupedGames[category] = [];
+                    }
+                    groupedGames[category].push({ id, ...game });
+                });
+
+                let optionsHtml = `<option value="">Select Game</option>`;
+                const sortedCategories = Object.keys(groupedGames).sort(); // Sort categories alphabetically
+
+                sortedCategories.forEach(category => {
+                    optionsHtml += `<optgroup label="${escapeJsStringForHtmlAttribute(category)}">`;
+                    groupedGames[category].sort((a,b) => a.title.localeCompare(b.title)).forEach(g => { // Sort games within each optgroup
+                        optionsHtml += `<option value="${escapeJsStringForHtmlAttribute(g.game_url)}" data-title="${escapeJsStringForHtmlAttribute(g.title)}">${escapeJsStringForHtmlAttribute(g.title)}</option>`;
+                    });
+                    optionsHtml += `</optgroup>`;
+                });
+
+                gameSelect.innerHTML = optionsHtml;
+            });
+
+            document.getElementById('createTournamentForm').addEventListener('submit', createTournament);
+
+            const listEl = document.getElementById('all-tournaments-list');
+            db.ref('tournaments').on('value', snap => {
+                const tournaments = snap.val();
+                if(!tournaments) { listEl.innerHTML = `<p class="text-center text-gray-500 py-4">No tournaments created.</p>`; return; }
+                listEl.innerHTML = Object.entries(tournaments).map(([id, t]) => `
+                    <div class="bg-white border-l-4 ${t.status === 'Completed' ? 'border-gray-400' : 'border-red-500'} p-3 rounded-lg shadow-sm flex items-center justify-between">
+                        <div>
+                            <p class="font-bold text-gray-800">${escapeJsStringForHtmlAttribute(t.title)} <span class="text-xs font-semibold ${t.status === 'Completed' ? 'text-gray-500' : 'text-red-500'}">(${escapeJsStringForHtmlAttribute(t.status)})</span></p>
+                            <p class="text-sm text-gray-500">${escapeJsStringForHtmlAttribute(t.game_name)}</p>
+                        </div>
+                        <div>
+                            <button onclick="navigateTo('adminManageTournamentPage', {tournamentId: '${escapeJsStringForHtmlAttribute(id)}'})" class="bg-blue-500 text-white px-3 py-1 rounded text-sm font-semibold shadow">Manage</button>
+                            <button onclick="deleteTournament('${escapeJsStringForHtmlAttribute(id)}')" class="bg-red-100 text-red-600 px-3 py-1 rounded text-sm ml-2"><i class="fas fa-trash"></i> Delete</button>
+                        </div>
+                    </div>`).join('');
+            });
+        }
+
+        async function renderAdminManageTournamentPage(container) {
+            if (!currentTournamentId) { container.innerHTML = `<p class="text-center p-8">Error: No match selected.</p>`; return; }
+            container.innerHTML = `<div class="p-4 space-y-6 bg-orange-50 min-h-screen" id="manage-tournament-content"><div class="text-center"><i class="fas fa-spinner fa-spin fa-2x text-red-500"></i></div></div>`;
+            const contentEl = document.getElementById('manage-tournament-content');
+            const tSnapshot = await db.ref(`tournaments/${currentTournamentId}`).once('value');
+            const tournament = tSnapshot.val();
+            const participants = (await db.ref(`participants/${currentTournamentId}`).once('value')).val() || {};
+            let participantOptions = '', participantListHtml = '';
+            for (const pId in participants) {
+                const user = (await db.ref(`users/${pId}`).once('value')).val();
+                if(user) {
+                    participantOptions += `<option value="${escapeJsStringForHtmlAttribute(pId)}">${escapeJsStringForHtmlAttribute(user.username)}</option>`;
+                    const pData = participants[pId];
+                    let gameResultText = pData.gameResult || 'Not Played';
+                    if (pData.score !== undefined) {
+                        gameResultText = `Time: ${pData.score}s`; 
+                    }
+                    participantListHtml += `<li class="bg-gray-100 p-2 rounded flex justify-between border border-gray-200 text-sm"><span>${escapeJsStringForHtmlAttribute(user.username)}</span><span class="font-bold text-red-600">${escapeJsStringForHtmlAttribute(gameResultText)}</span></li>`;
+                }
+            }
+            contentEl.innerHTML = `
+                <div class="flex items-center gap-4 mb-4"><button onclick="navigateTo('adminTournamentPage')" class="text-gray-500"><i class="fas fa-arrow-left fa-lg"></i></button><h2 class="text-2xl font-black text-gray-800">${escapeJsStringForHtmlAttribute(tournament.title)}</h2></div>
+                <div class="bg-white border border-orange-100 p-4 rounded-xl shadow-sm space-y-3">
+                    <h3 class="font-bold text-lg text-gray-700">Room Details</h3>
+                    <form id="roomDetailsForm" class="space-y-3">
+                        <input type="text" id="t-roomid" placeholder="Room ID" value="${escapeJsStringForHtmlAttribute(tournament.room_id || '')}" class="w-full p-2 bg-gray-50 rounded border border-gray-300">
+                        <input type="text" id="t-roompass" placeholder="Room Password" value="${escapeJsStringForHtmlAttribute(tournament.room_password || '')}" class="w-full p-2 bg-gray-50 rounded border border-gray-300">
+                        <select id="t-status" class="w-full p-2 bg-gray-50 rounded border border-gray-300">
+                            <option value="Upcoming" ${tournament.status === 'Upcoming' && 'selected'}>Upcoming</option>
+                            <option value="Live" ${tournament.status === 'Live' && 'selected'}>Live</option>
+                            <option value="Completed" ${tournament.status === 'Completed' && 'selected'}>Completed</option>
+                        </select>
+                        <button type="submit" class="w-full text-white bg-blue-600 p-2 rounded font-bold shadow">Update Details</button>
+                    </form>
+                </div>
+                <div class="bg-white border border-orange-100 p-4 rounded-xl shadow-sm space-y-3 ${tournament.status === 'Completed' ? 'hidden' : ''}">
+                     <h3 class="font-bold text-lg text-gray-700">Declare Winner</h3>
+                     <p class="text-xs text-gray-500 mb-2">Player with highest time is the winner.</p>
+                     <form id="winnerForm" class="space-y-3">
+                        <select id="winner-select" class="w-full p-2 bg-gray-50 rounded border border-gray-300"><option value="">Select winner...</option>${participantOptions}</select>
+                        <button type="submit" class="w-full text-white bg-green-600 p-2 rounded font-bold shadow">Declare & Distribute</button>
+                     </form>
+                </div>
+                <div class="bg-white border border-orange-100 p-4 rounded-xl shadow-sm">
+                    <h3 class="font-bold text-lg mb-2 text-gray-700">Players (${Object.keys(participants).length})</h3>
+                    <ul class="space-y-1 max-h-60 overflow-y-auto">${participantListHtml || '<li class="text-gray-400 italic">No players joined yet.</li>'}</ul>
+                </div>`;
+            document.getElementById('roomDetailsForm').addEventListener('submit', updateRoomDetails);
+            document.getElementById('winnerForm').addEventListener('submit', declareWinner);
+        }
+
+        function renderAdminUsersPage(container) {
+            navigateTo('adminManageUsersPage');
+        }
+
+        function renderAdminSettingsPage(container) {
+            container.innerHTML = `
+                <div class="p-4 space-y-6 bg-orange-50 min-h-screen">
+                    <h2 class="text-2xl font-black text-gray-800">Admin Settings</h2>
+                    
+                    <div class="bg-white border border-orange-100 p-4 rounded-xl shadow-sm">
+                        <p class="text-gray-500">Admin Email</p>
+                        <p class="text-lg font-bold text-gray-800">${currentAdminData?.email || 'N/A'}</p>
+                    </div>
+
+                    <div class="space-y-3">
+                        <button onclick="navigateTo('adminAppSettingsPage')" class="w-full bg-white text-gray-700 border border-gray-300 p-4 rounded-xl font-bold shadow-sm flex items-center justify-between transition transform hover:scale-105 active:scale-95">
+                            <span><i class="fas fa-sliders-h mr-3 text-red-500"></i>Manage Global App Settings</span> <i class="fas fa-chevron-right text-gray-400"></i>
+                        </button>
+                        <button onclick="navigateTo('adminLiveGamePage')" class="w-full bg-white text-gray-700 border border-gray-300 p-4 rounded-xl font-bold shadow-sm flex items-center justify-between transition transform hover:scale-105 active:scale-95">
+                            <span><i class="fas fa-broadcast-tower mr-3 text-red-500"></i>Manage Live Game Status</span> <i class="fas fa-chevron-right text-gray-400"></i>
+                        </button>
+                         <button onclick="navigateTo('adminGameLogsPage')" class="w-full bg-white text-gray-700 border border-gray-300 p-4 rounded-xl font-bold shadow-sm flex items-center justify-between transition transform hover:scale-105 active:scale-95">
+                            <span><i class="fas fa-clipboard-list mr-3 text-red-500"></i>View All Game Logs</span> <i class="fas fa-chevron-right text-gray-400"></i>
+                        </button>
+                        <button onclick="navigateTo('adminTransactionsPage')" class="w-full bg-white text-gray-700 border border-gray-300 p-4 rounded-xl font-bold shadow-sm flex items-center justify-between transition transform hover:scale-105 active:scale-95">
+                            <span><i class="fas fa-history mr-3 text-red-500"></i>View All Transactions</span> <i class="fas fa-chevron-right text-gray-400"></i>
+                        </button>
+                        <button onclick="navigateTo('adminVideoContentPage')" class="w-full bg-white text-gray-700 border border-gray-300 p-4 rounded-xl font-bold shadow-sm flex items-center justify-between transition transform hover:scale-105 active:scale-95">
+                            <span><i class="fas fa-video mr-3 text-red-500"></i>Manage Video Content</span> <i class="fas fa-chevron-right text-gray-400"></i>
+                        </button>
+                         <button onclick="navigateTo('adminVideoWatchLogsPage')" class="w-full bg-white text-gray-700 border border-gray-300 p-4 rounded-xl font-bold shadow-sm flex items-center justify-between transition transform hover:scale-105 active:scale-95">
+                            <span><i class="fas fa-eye mr-3 text-red-500"></i>View Video Watch Logs</span> <i class="fas fa-chevron-right text-gray-400"></i>
+                        </button>
+                        <button onclick="navigateTo('adminWorkerEarningsPage')" class="w-full bg-white text-gray-700 border border-gray-300 p-4 rounded-xl font-bold shadow-sm flex items-center justify-between transition transform hover:scale-105 active:scale-95">
+                            <span><i class="fas fa-money-bill-wave mr-3 text-red-500"></i>Manage Worker Earnings</span> <i class="fas fa-chevron-right text-gray-400"></i>
+                        </button>
+                        <hr class="my-4 border-orange-100">
+                        <button onclick="navigateTo('adminManageUsersPage')" class="w-full bg-white text-gray-700 border border-gray-300 p-4 rounded-xl font-bold shadow-sm flex items-center justify-between transition transform hover:scale-105 active:scale-95">
+                            <span><i class="fas fa-users mr-3 text-blue-500"></i>Manage Users</span> <i class="fas fa-chevron-right text-gray-400"></i>
+                        </button>
+                        <button onclick="navigateTo('adminAppContentPage')" class="w-full bg-white text-gray-700 border border-gray-300 p-4 rounded-xl font-bold shadow-sm flex items-center justify-between transition transform hover:scale-105 active:scale-95">
+                            <span><i class="fas fa-file-alt mr-3 text-green-500"></i>Manage App Content (Policies)</span> <i class="fas fa-chevron-right text-gray-400"></i>
+                        </button>
+                        <button onclick="navigateTo('adminContactMessagesPage')" class="w-full bg-white text-gray-700 border border-gray-300 p-4 rounded-xl font-bold shadow-sm flex items-center justify-between transition transform hover:scale-105 active:scale-95">
+                            <span><i class="fas fa-envelope mr-3 text-purple-500"></i>Manage Contact Messages</span> <i class="fas fa-chevron-right text-gray-400"></i>
+                        </button>
+                    </div>
+
+                    <div class="bg-white border border-orange-100 p-4 rounded-xl shadow-sm">
+                        <h3 class="text-lg font-bold mb-2">Security</h3>
+                        <button onclick="changePassword()" class="w-full text-gray-700 bg-gray-100 border border-gray-300 p-3 rounded-lg font-bold">Reset Password</button>
+                    </div>
+                    <a href="index.html" class="block w-full text-center text-white bg-gray-800 p-3 rounded-lg font-bold shadow-md">Switch to User App</a>
+                </div>`;
+        }
+
+        async function renderAdminManageUsersPage(container) {
+            container.innerHTML = `
+                <div class="p-4 bg-orange-50 min-h-screen">
+                    <div class="flex items-center gap-4 mb-4">
+                        <button onclick="navigateTo('adminSettingsPage')" class="text-gray-500"><i class="fas fa-arrow-left fa-lg"></i></button>
+                        <h2 class="text-2xl font-black text-gray-800">Manage Users</h2>
+                    </div>
+
+                    <!-- Search Bar -->
+                    <div class="bg-white p-4 rounded-xl shadow-md border border-orange-100 mb-4">
+                        <label for="user-search-input" class="block text-gray-700 text-sm font-semibold mb-2">Search User by Email:</label>
+                        <div class="flex gap-2">
+                            <input type="email" id="user-search-input" placeholder="Enter email to search..." class="flex-1 p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" onkeyup="filterUsersByEmail()">
+                            <button onclick="filterUsersByEmail()" class="bg-blue-500 text-white px-4 py-2 rounded-lg font-bold shadow-md">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="admin-users-list" class="space-y-3">
+                        <p class="text-center text-gray-400 italic">Loading users...</p>
+                    </div>
+                </div>
+            `;
+
+            const listEl = document.getElementById('admin-users-list');
+
+            console.log("Admin Panel: Attempting to fetch users data...");
+
+            // Listen for real-time updates on the 'users' node
+            db.ref('users').on('value', snap => {
+                const users = snap.val();
+                console.log("Admin Panel: Users data snapshot received:", users);
+                allUsersData = users || {}; // Store all fetched users in the global variable
+
+                // After receiving data, filter and render it.
+                // This ensures new users (who appear in Firebase RTDB) are displayed in real-time.
+                filterUsersByEmail(); 
+            }, (error) => {
+                console.error("Admin Panel: Firebase Realtime Database error fetching users:", error);
+                listEl.innerHTML = `<p class="text-center text-red-500 italic">Error loading users: ${error.message}. Please check your Firebase security rules.</p>`;
+                showToast(`Error fetching users: ${error.message}`, true);
+            });
+
+            // Make sure the form listener for the edit modal is attached (it's global)
+            document.getElementById('editUserForm').addEventListener('submit', updateUserProfile);
+        }
+
+        function filterUsersByEmail() {
+            const listEl = document.getElementById('admin-users-list');
+            const searchInput = document.getElementById('user-search-input');
+            
+            // Ensure search input and users list element exist
+            if (!searchInput || !listEl) {
+                console.error("Search input or user list element not found.");
+                return;
+            }
+
+            const searchTerm = searchInput.value.toLowerCase().trim();
+            let usersHtml = '';
+            let userCount = 0;
+
+            if (Object.keys(allUsersData).length === 0) {
+                listEl.innerHTML = `<p class="text-center text-gray-400 italic">No users found in database or data could not be retrieved.</p>`;
+                return;
+            }
+
+            // Convert allUsersData object to an array for sorting
+            const usersArray = Object.keys(allUsersData).map(uid => ({ uid, ...allUsersData[uid] }));
+
+            // Sort users by created_at (newest first)
+            usersArray.sort((a, b) => {
+                const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+                const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+                return dateB - dateA; // Newest first
+            });
+
+            for (const user of usersArray) { // Iterate through the sorted array
+                // Defensive check: Ensure basic user properties exist before trying to display
+                if (user && user.username && user.email) {
+                    const userEmailLower = user.email.toLowerCase();
+                    
+                    // Filter logic: Check if the user's email contains the search term
+                    if (userEmailLower.includes(searchTerm)) {
+                        const lockStatusColor = user.locked ? 'text-red-600' : 'text-green-600';
+                        const lockStatusText = user.locked ? 'Locked' : 'Active';
+                        const createdAtDate = user.created_at ? new Date(user.created_at).toLocaleString() : 'N/A';
+
+
+                        usersHtml += `
+                            <div class="bg-white p-3 rounded-lg shadow-sm border border-yellow-100 flex items-center justify-between">
+                                <div>
+                                    <p class="font-bold text-gray-800">${escapeJsStringForHtmlAttribute(user.username)}</p>
+                                    <p class="text-sm text-gray-500">${escapeJsStringForHtmlAttribute(user.email)}</p>
+                                    <p class="text-sm font-semibold mt-1">Balance: <span class="text-green-600">${formatCurrency(user.wallet_balance || 0)}</span></p>
+                                    <p class="text-xs font-semibold ${lockStatusColor}">${lockStatusText}</p>
+                                    <p class="text-xs text-gray-400">Signed Up: ${createdAtDate}</p>
+                                </div>
+                                <button onclick="openEditUserModal(
+                                    '${escapeJsStringForHtmlAttribute(user.uid)}', 
+                                    '${escapeJsStringForHtmlAttribute(user.username)}', 
+                                    '${escapeJsStringForHtmlAttribute(user.email)}', 
+                                    ${user.wallet_balance || 0}, 
+                                    ${user.locked || false}, 
+                                    \`${escapeJsStringForHtmlAttribute(user.lockReason || '')}\`
+                                )" class="bg-blue-500 text-white px-3 py-1 rounded text-sm font-semibold shadow">Edit</button>
+                            </div>
+                        `;
+                        userCount++;
+                    }
+                } else {
+                    console.warn(`Admin Panel: Skipping user with UID '${user.uid}' due to incomplete data:`, user);
+                }
+            }
+
+            if (userCount > 0) {
+                listEl.innerHTML = usersHtml;
+                console.log(`Admin Panel: Displaying ${userCount} filtered users.`);
+            } else {
+                listEl.innerHTML = `<p class="text-center text-gray-400 italic">No users found matching "${searchTerm}".</p>`;
+                console.log(`Admin Panel: No users matched search term "${searchTerm}".`);
+            }
+        }
+
+        function toggleLockReasonInput() {
+            const lockedCheckbox = document.getElementById('edit-user-locked-status');
+            const lockReasonGroup = document.getElementById('edit-user-lock-reason-group');
+            if (lockedCheckbox.checked) {
+                lockReasonGroup.style.display = 'block';
+                document.getElementById('edit-user-lock-reason').setAttribute('required', 'required');
+            } else {
+                lockReasonGroup.style.display = 'none';
+                document.getElementById('edit-user-lock-reason').removeAttribute('required');
+                document.getElementById('edit-user-lock-reason').value = ''; 
+            }
+        }
+
+        function openEditUserModal(uid, username, email, balance, isLocked, lockReason) {
+            document.getElementById('edit-user-uid').value = uid;
+            document.getElementById('edit-user-username').value = username;
+            document.getElementById('edit-user-email').value = email;
+            document.getElementById('edit-user-balance-display').value = formatCurrency(balance);
+            document.getElementById('edit-user-balance-adjust').value = ''; 
+            document.getElementById('edit-user-balance-reason').value = ''; 
+
+            const lockedCheckbox = document.getElementById('edit-user-locked-status');
+            const lockReasonInput = document.getElementById('edit-user-lock-reason');
+            
+            lockedCheckbox.checked = isLocked;
+            lockReasonInput.value = lockReason;
+            toggleLockReasonInput(); 
+
+            toggleModal('editUserModal', true);
+        }
+
+        async function updateUserProfile(e) {
+            e.preventDefault();
+            const uid = document.getElementById('edit-user-uid').value;
+            const newUsername = document.getElementById('edit-user-username').value.trim();
+            const balanceAdjustment = Number(document.getElementById('edit-user-balance-adjust').value);
+            const balanceReason = document.getElementById('edit-user-balance-reason').value.trim();
+            const isLocked = document.getElementById('edit-user-locked-status').checked;
+            const lockReason = document.getElementById('edit-user-lock-reason').value.trim();
+
+            if (!newUsername) {
+                showToast('Username cannot be empty!', true);
+                return;
+            }
+
+            if (isLocked && !lockReason) {
+                showToast('Lock reason is required when locking an account!', true);
+                return;
+            }
+
+            try {
+                const userRef = db.ref(`users/${uid}`);
+                const previousUserData = (await userRef.once('value')).val();
+                const previousLockedStatus = previousUserData?.locked || false;
+
+                const updates = { username: newUsername };
+
+                if (isLocked !== previousLockedStatus) {
+                    updates.locked = isLocked;
+                    updates.lockReason = isLocked ? lockReason : null; 
+
+                    const notificationMessage = isLocked
+                        ? `Your account has been locked by an administrator. Reason: ${lockReason || 'No reason provided.'}`
+                        : `Your account has been unlocked by an administrator.`;
+                    
+                    await db.ref(`notifications/${uid}`).push({
+                        title: isLocked ? 'Account Locked' : 'Account Unlocked',
+                        message: notificationMessage,
+                        timestamp: new Date().toISOString(),
+                        status: 'unread',
+                        type: isLocked ? 'account_locked' : 'account_unlocked'
+                    });
+                } else if (isLocked && lockReason !== (previousUserData?.lockReason || '')) {
+                     updates.lockReason = lockReason;
+                     await db.ref(`notifications/${uid}`).push({
+                        title: 'Account Lock Reason Updated',
+                        message: `Your account lock reason has been updated by an administrator. New reason: ${lockReason || 'No reason provided.'}`,
+                        timestamp: new Date().toISOString(),
+                        status: 'unread',
+                        type: 'account_lock_reason_update'
+                    });
+                }
+                
+                if (balanceAdjustment !== 0) {
+                    if (!balanceReason) {
+                        showToast('Reason for balance adjustment is required!', true);
+                        return;
+                    }
+
+                    await userRef.child('wallet_balance').transaction((currentBalance) => {
+                        const balanceBefore = currentBalance || 0;
+                        const newBalance = balanceBefore + balanceAdjustment;
+                        return newBalance;
+                    }, async (error, committed, snapshot) => {
+                        if (error) {
+                            showToast('Balance update failed: ' + error.message, true);
+                        } else if (committed) {
+                            await db.ref(`transactions/${uid}`).push({
+                                amount: Math.abs(balanceAdjustment),
+                                type: balanceAdjustment > 0 ? 'credit' : 'debit',
+                                description: `Admin adjustment: ${balanceReason}`,
+                                created_at: new Date().toISOString(),
+                                admin_uid: currentAdminData.uid
+                            });
+                            showToast('User profile and balance updated!');
+                        }
+                    });
+                }
+                
+                await userRef.update(updates);
+                showToast('User profile updated!');
+
+                toggleModal('editUserModal', false);
+            } catch (error) {
+                console.error("Error updating user:", error);
+                showToast('Failed to update user. ' + error.message, true);
+            }
+        }
+
+async function renderAdminAppContentPage(container) {
+    container.innerHTML = `
+        <div class="p-4 bg-orange-50 min-h-screen">
+            <div class="flex items-center gap-4 mb-4">
+                <button onclick="navigateTo('adminSettingsPage')" class="text-gray-500"><i class="fas fa-arrow-left fa-lg"></i></button>
+                <h2 class="text-2xl font-black text-gray-800">Manage App Content</h2>
+            </div>
+            <p class="text-gray-600 mb-4">Edit the content for various information pages in the user app.</p>
+            <div id="app-content-list" class="space-y-3">
+                <p class="text-center text-gray-400 italic">Loading content types...</p>
+            </div>
+        </div>
+    `;
+
+    const contentTypes = {
+        'privacy_policy': 'Privacy Policy',
+        'about_us': 'About Us',
+        'terms_conditions': 'Terms & Conditions',
+        'deposit_rules': 'Deposit Rules',
+        'withdrawal_rules': 'Withdrawal Rules'
+    };
+
+    const listEl = document.getElementById('app-content-list');
+    listEl.innerHTML = '';
+
+    for (const key in contentTypes) {
+        const title = contentTypes[key];
+        const contentSnap = await db.ref(`app_content/${key}`).once('value');
+        const contentData = contentSnap.val() || {
+            displayTitle: title,
+            body: `Default content for ${title}. Please edit.`
+        };
+
+        const safeTitle = escapeJsStringForHtmlAttribute(contentData.displayTitle);
+        const safeBody = escapeJsStringForHtmlAttribute(contentData.body);
+
+        listEl.innerHTML += `
+            <div class="bg-white p-3 rounded-lg shadow-sm border border-green-100 flex items-center justify-between">
+                <div>
+                    <p class="font-bold text-gray-800">${escapeJsStringForHtmlAttribute(contentData.displayTitle)}</p>
+                    <p class="text-sm text-gray-500 truncate max-w-[200px]">${escapeJsStringForHtmlAttribute(contentData.body)}</p>
+                </div>
+                <button 
+                    onclick="openEditAppContentModal('${escapeJsStringForHtmlAttribute(key)}', '${safeTitle}', '${safeBody}')"
+                    class="bg-blue-500 text-white px-3 py-1 rounded text-sm font-semibold shadow">
+                    Edit
+                </button>
+            </div>
+        `;
+    }
+
+    const form = document.getElementById('editAppContentForm');
+    if (form) {
+        form.addEventListener('submit', updateAppContent);
+    }
+}
+
+        function openEditAppContentModal(key, displayTitle, body) {
+            document.getElementById('edit-content-key').value = key;
+            document.getElementById('edit-content-title-display').textContent = `Edit ${displayTitle}`;
+            document.getElementById('edit-content-display-title').value = displayTitle;
+            document.getElementById('edit-content-body').value = body;
+            toggleModal('editAppContentModal', true);
+        }
+
+        async function updateAppContent(e) {
+            e.preventDefault();
+            const key = document.getElementById('edit-content-key').value;
+            const displayTitle = document.getElementById('edit-content-display-title').value.trim();
+            const body = document.getElementById('edit-content-body').value.trim();
+
+            if (!displayTitle || !body) {
+                showToast('Title and content cannot be empty!', true);
+                return;
+            }
+
+            try {
+                await db.ref(`app_content/${key}`).set({
+                    displayTitle: displayTitle,
+                    body: body,
+                    last_updated: new Date().toISOString(),
+                    updated_by: currentAdminData.uid
+                });
+                showToast('App content updated successfully!');
+                toggleModal('editAppContentModal', false);
+            } catch (error) {
+                console.error("Error updating app content:", error);
+                showToast('Failed to update app content. ' + error.message, true);
+            }
+        }
+
+        async function renderAdminContactMessagesPage(container) {
+            container.innerHTML = `
+                <div class="p-4 bg-orange-50 min-h-screen">
+                    <div class="flex items-center gap-4 mb-4">
+                        <button onclick="navigateTo('adminSettingsPage')" class="text-gray-500"><i class="fas fa-arrow-left fa-lg"></i></button>
+                        <h2 class="text-2xl font-black text-gray-800">Contact Messages</h2>
+                    </div>
+                    <div id="contact-messages-list" class="space-y-3">
+                        <p class="text-center text-gray-400 italic">Loading messages...</p>
+                    </div>
+                </div>
+            `;
+
+            db.ref('contact_messages').on('value', async snap => {
+                const messages = snap.val();
+                const listEl = document.getElementById('contact-messages-list');
+                if(!messages) {
+                    listEl.innerHTML = `<p class="text-center text-gray-400 italic">No contact messages.</p>`;
+                    return;
+                }
+
+                let messagesHtml = '';
+                const messageArray = Object.entries(messages).map(([id, msg]) => ({id, ...msg}));
+                messageArray.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+                for (const {id, userId, username, email, subject, message, timestamp, status, adminReply} of messageArray) {
+                    const statusClass = status === 'pending' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700';
+                    const icon = status === 'pending' ? 'fas fa-exclamation-circle' : 'fas fa-check-circle';
+                    messagesHtml += `
+                        <div class="bg-white p-3 rounded-lg shadow-sm border border-gray-100 flex flex-col gap-2">
+                            <div class="flex justify-between items-center w-full"> 
+                                <p class="font-bold text-gray-800">${escapeJsStringForHtmlAttribute(subject)}</p>
+                                <span class="text-xs font-semibold px-2 py-1 rounded-full ${statusClass}"><i class="${icon} mr-1"></i>${status.toUpperCase()}</span>
+                            </div>
+                            <p class="text-sm text-gray-500">From: ${escapeJsStringForHtmlAttribute(username)} (${escapeJsStringForHtmlAttribute(email)})</p>
+                            <p class="text-xs text-gray-400">${new Date(timestamp).toLocaleString()}</p>
+                            <button onclick="openViewContactMessageModal(
+                                '${escapeJsStringForHtmlAttribute(id)}', 
+                                '${escapeJsStringForHtmlAttribute(userId)}', 
+                                '${escapeJsStringForHtmlAttribute(username)}', 
+                                '${escapeJsStringForHtmlAttribute(email)}', 
+                                '${escapeJsStringForHtmlAttribute(subject)}', 
+                                \`${escapeJsStringForHtmlAttribute(message)}\`, 
+                                '${escapeJsStringForHtmlAttribute(timestamp)}', 
+                                '${escapeJsStringForHtmlAttribute(status)}', 
+                                \`${escapeJsStringForHtmlAttribute(adminReply || '')}\`
+                            )" class="bg-blue-500 text-white px-3 py-1 rounded text-sm font-semibold shadow mt-2">View / Reply</button>
+                        </div>
+                    `;
+                }
+                listEl.innerHTML = messagesHtml;
+            });
+
+            document.getElementById('replyContactMessageForm').addEventListener('submit', sendAdminReply);
+        }
+
+        function openViewContactMessageModal(id, userId, username, email, subject, message, timestamp, status, adminReply) {
+            document.getElementById('reply-message-id').value = id;
+            document.getElementById('reply-user-id').value = userId;
+            document.getElementById('msg-user-info').textContent = `${username} (${email})`;
+            document.getElementById('msg-subject').textContent = subject;
+            document.getElementById('msg-body').textContent = message;
+            document.getElementById('msg-timestamp').textContent = new Date(timestamp).toLocaleString();
+
+            const replyDisplay = document.getElementById('msg-admin-reply-display');
+            const replyText = document.getElementById('msg-admin-reply-text');
+            const replyFormBody = document.getElementById('reply-message-body');
+
+            if (adminReply) {
+                replyDisplay.style.display = 'block';
+                replyText.textContent = adminReply;
+                replyFormBody.value = adminReply; 
+                replyFormBody.setAttribute('placeholder', 'Edit your reply...');
+            } else {
+                replyDisplay.style.display = 'none';
+                replyText.textContent = '';
+                replyFormBody.value = '';
+                replyFormBody.setAttribute('placeholder', 'Type your reply here...');
+            }
+            toggleModal('viewContactMessageModal', true);
+        }
+
+        async function sendAdminReply(e) {
+            e.preventDefault();
+            const messageId = document.getElementById('reply-message-id').value;
+            const userId = document.getElementById('reply-user-id').value;
+            const replyText = document.getElementById('reply-message-body').value.trim();
+
+            if (!replyText) {
+                showToast('Reply message cannot be empty!', true);
+                return;
+            }
+
+            try {
+                await db.ref(`contact_messages/${messageId}`).update({
+                    status: 'replied',
+                    adminReply: replyText,
+                    adminRepliedAt: new Date().toISOString(),
+                    adminRepliedBy: currentAdminData.uid
+                });
+                
+                await db.ref(`notifications/${userId}`).push({
+                    title: `Admin Reply: ${document.getElementById('msg-subject').textContent}`,
+                    message: `Admin replied to your message (Subject: "${document.getElementById('msg-subject').textContent}").`,
+                    timestamp: new Date().toISOString(),
+                    status: 'unread',
+                    type: 'admin_reply'
+                });
+
+                showToast('Reply sent successfully!');
+                toggleModal('viewContactMessageModal', false);
+            } catch (error) {
+                console.error("Error sending reply:", error);
+                showToast('Failed to send reply. ' + error.message, true);
+            }
+        }
+
+        async function renderAdminReferralsPage(container) {
+            container.innerHTML = `
+                <div class="p-4 bg-orange-50 min-h-screen">
+                    <div class="flex items-center gap-4 mb-4">
+                        <button onclick="navigateTo('adminDashboardPage')" class="text-gray-500"><i class="fas fa-arrow-left fa-lg"></i></button>
+                        <h2 class="text-2xl font-black text-gray-800">Manage Referrals</h2>
+                    </div>
+                    <div id="admin-referrers-list" class="space-y-3">
+                        <p class="text-center text-gray-400 italic">Loading referrers...</p>
+                    </div>
+                </div>
+            `;
+
+            db.ref('users').on('value', snap => {
+                const users = snap.val();
+                const listEl = document.getElementById('admin-referrers-list');
+                if (!users) {
+                    listEl.innerHTML = `<p class="text-center text-gray-400 italic">No users found.</p>`;
+                    return;
+                }
+
+                let referrersHtml = '';
+                const referrers = Object.values(users).filter(user => (user.referrals_earned_count || 0) > 0);
+
+                if (referrers.length === 0) {
+                    listEl.innerHTML = `<p class="text-center text-gray-400 italic">No users have referred others yet.</p>`;
+                    return;
+                }
+
+                for (const referrer of referrers) {
+                    referrersHtml += `
+                        <div class="bg-white p-3 rounded-lg shadow-sm border border-blue-100 flex items-center justify-between">
+                            <div>
+                                <p class="font-bold text-gray-800">${escapeJsStringForHtmlAttribute(referrer.username)}</p>
+                                <p class="text-sm text-gray-500">${escapeJsStringForHtmlAttribute(referrer.email)}</p>
+                                <p class="text-sm font-semibold mt-1">Referrals: <span class="text-purple-600">${referrer.referrals_earned_count || 0}</span></p>
+                                <p class="text-sm font-semibold">Balance: <span class="text-green-600">${formatCurrency(referrer.wallet_balance || 0)}</span></p>
+                            </div>
+                            <div class="flex flex-col gap-2">
+                                <button onclick="navigateTo('adminViewReferredUsersPage', { referrerUid: '${escapeJsStringForHtmlAttribute(referrer.uid)}' })" class="bg-yellow-500 text-white px-3 py-1 rounded text-sm font-semibold shadow">View Referrals</button>
+                                <button onclick="openEditUserModal(
+                                    '${escapeJsStringForHtmlAttribute(referrer.uid)}', 
+                                    '${escapeJsStringForHtmlAttribute(referrer.username)}', 
+                                    '${escapeJsStringForHtmlAttribute(referrer.email)}', 
+                                    ${referrer.wallet_balance || 0}, 
+                                    ${referrer.locked || false}, 
+                                    \`${escapeJsStringForHtmlAttribute(referrer.lockReason || '')}\`
+                                )" class="bg-blue-500 text-white px-3 py-1 rounded text-sm font-semibold shadow">Edit Wallet</button>
+                            </div>
+                        </div>
+                    `;
+                }
+                listEl.innerHTML = referrersHtml;
+            });
+            document.getElementById('editUserForm').addEventListener('submit', updateUserProfile);
+        }
+
+        async function renderAdminViewReferredUsersPage(container) {
+            const referrerUid = localStorage.getItem('adminReferrerUid');
+            let actualReferrerUsername = "Loading..."; // Default text
+
+            if (!referrerUid) {
+                container.innerHTML = `<p class="text-center p-8">Error: Referrer UID not found. Please navigate from the Referrals list.</p>`;
+                // No need to clear local storage here, as it's already checked and confirmed missing
+                return;
+            }
+
+            // Fetch actual referrer data from Firebase using the UID
+            const referrerSnap = await db.ref(`users/${referrerUid}`).once('value');
+            const referrerData = referrerSnap.val();
+
+            if (!referrerData || !referrerData.username) {
+                container.innerHTML = `<p class="text-center p-8">Error: Referrer data not found for UID "${referrerUid}". It might have been deleted. Please select a valid referrer from the list.</p>`;
+                // Clear localStorage for this potentially invalid referrer
+                localStorage.removeItem('adminReferrerUid');
+                return;
+            }
+
+            // Use the fresh username from Firebase for display and filtering
+            actualReferrerUsername = referrerData.username;
+            // Also update localStorage for consistency, though not strictly needed here as we fetched it
+            localStorage.setItem('adminReferrerUsername', actualReferrerUsername);
+
+
+            container.innerHTML = `
+                <div class="p-4 bg-orange-50 min-h-screen">
+                    <div class="flex items-center gap-4 mb-4">
+                        <button onclick="navigateTo('adminReferralsPage')" class="text-gray-500"><i class="fas fa-arrow-left fa-lg"></i></button>
+                        <h2 class="text-2xl font-black text-gray-800">Referred by ${escapeJsStringForHtmlAttribute(actualReferrerUsername)}</h2>
+                    </div>
+                    <div id="referred-users-list" class="space-y-3">
+                        <p class="text-center text-gray-400 italic">Loading referred users...</p>
+                    </div>
+                </div>
+            `;
+
+            const listEl = document.getElementById('referred-users-list');
+
+            // Use the global allUsersData, which is kept up-to-date by the listener in renderAdminManageUsersPage
+            // If allUsersData is empty or not yet loaded, try to load it first (defensive)
+            if (Object.keys(allUsersData).length === 0) {
+                const allUsersSnap = await db.ref('users').once('value');
+                allUsersData = allUsersSnap.val() || {};
+            }
+
+            if (!allUsersData || Object.keys(allUsersData).length === 0) {
+                listEl.innerHTML = `<p class="text-center text-gray-400 italic">No users found in database.</p>`;
+                return;
+            }
+
+            let referredUsersHtml = '';
+            
+            const referredUsers = Object.values(allUsersData).filter(user => { // Filter from global data
+                if (!user || !user.referred_by_username) return false;
+                
+                const userRefBy = String(user.referred_by_username).toLowerCase();
+                const targetRef = String(actualReferrerUsername).toLowerCase(); // Use fresh username for comparison
+                
+                return userRefBy === targetRef;
+            });
+
+            if (referredUsers.length === 0) {
+                listEl.innerHTML = `<p class="text-center text-gray-400 italic">${escapeJsStringForHtmlAttribute(actualReferrerUsername)} has not referred any users yet.</p>`;
+                return;
+            }
+
+            for (const user of referredUsers) {
+                referredUsersHtml += `
+                    <div class="bg-white p-3 rounded-lg shadow-sm border border-purple-100 flex items-center justify-between">
+                        <div>
+                            <p class="font-bold text-gray-800">${escapeJsStringForHtmlAttribute(user.username)}</p>
+                            <p class="text-sm text-gray-500">${escapeJsStringForHtmlAttribute(user.email)}</p>
+                            <p class="text-sm font-semibold mt-1">Balance: <span class="text-green-600">${formatCurrency(user.wallet_balance || 0)}</span></p>
+                            <p class="text-xs text-gray-400">Referred by: ${escapeJsStringForHtmlAttribute(user.referred_by_username)}</p>
+                        </div>
+                        <button onclick="openEditUserModal(
+                            '${escapeJsStringForHtmlAttribute(user.uid)}', 
+                            '${escapeJsStringForHtmlAttribute(user.username)}', 
+                            '${escapeJsStringForHtmlAttribute(user.email)}', 
+                            ${user.wallet_balance || 0}, 
+                            ${user.locked || false}, 
+                            \`${escapeJsStringForHtmlAttribute(user.lockReason || '')}\`
+                        )" class="bg-blue-500 text-white px-3 py-1 rounded text-sm font-semibold shadow">Edit Wallet</button>
+                        </div>
+                `;
+            }
+            listEl.innerHTML = referredUsersHtml;
+            // The listener for editUserForm is already global, no need to re-attach.
+        }
+        
+        async function deleteTournament(tournamentId) {
+            const tournamentTitleSnap = await db.ref(`tournaments/${tournamentId}/title`).once('value');
+            const tournamentTitle = tournamentTitleSnap.val() || 'this match';
+
+            if (confirm(`Are you sure you want to permanently delete "${tournamentTitle}"? This will remove all associated match data and participants.`)) {
+                const updates = {};
+                updates[`/tournaments/${tournamentId}`] = null;
+                updates[`/participants/${tournamentId}`] = null;
+
+                try {
+                    await db.ref().update(updates);
+                    showToast(`Match "${tournamentTitle}" deleted successfully ✅`);
+                } catch (error) {
+                    console.error("Error deleting match:", error);
+                    showToast(`Match deletion failed ❌: ${error.message}`, true);
+                }
+            }
+        }
+
+
+        function logout() { auth.signOut(); }
+        function changePassword() { auth.sendPasswordResetEmail(auth.currentUser.email).then(() => showToast(`Reset link sent.`)).catch(err => showToast(err.message, true)); }
+
+        async function createTournament(e) {
+            e.preventDefault();
+            const form = e.target;
+            const gameSelect = document.getElementById('t-game-select');
+            
+            const selectedOption = gameSelect.options[gameSelect.selectedIndex];
+            const gameTitle = selectedOption.getAttribute('data-title');
+            const gameUrl = selectedOption.value; // Correctly get value from selected option
+            
+            if(!gameUrl) return showToast('Please select a game!', true);
+
+            const newTournament = {
+                title: form['t-title'].value, 
+                game_name: gameTitle,  
+                game_url: gameUrl,     
+                game_type: 'survival', 
+                entry_fee: Number(form['t-fee'].value), 
+                prize_pool: Number(form['t-prize'].value),
+                match_time: new Date(form['t-time'].value).toISOString(), 
+                commission_percentage: Number(form['t-commission'].value),
+                status: 'Upcoming', 
+                created_at: new Date().toISOString()
+            };
+            await db.ref('tournaments').push(newTournament);
+            showToast('Match created!');
+            form.reset();
+        }
+                
+        async function updateRoomDetails(e) {
+            e.preventDefault();
+            await db.ref(`tournaments/${currentTournamentId}`).update({
+                room_id: document.getElementById('t-roomid').value,
+                room_password: document.getElementById('t-roompass').value,
+                status: document.getElementById('t-status').value
+            });
+            showToast('Updated!');
+            renderAdminManageTournamentPage(document.getElementById('adminManageTournamentPage'));
+        }
+
+        async function declareWinner(e) {
+            e.preventDefault();
+            const winnerId = document.getElementById('winner-select').value;
+            if (!winnerId) return showToast('Select a winner!', true);
+            const tournament = (await db.ref(`tournaments/${currentTournamentId}`).once('value')).val();
+            const winner = (await db.ref(`users/${winnerId}`).once('value')).val();
+            const newBalance = (winner.wallet_balance || 0) + tournament.prize_pool;
+            const updates = {
+                [`/tournaments/${currentTournamentId}/status`]: 'Completed', [`/tournaments/${currentTournamentId}/winner_id`]: winnerId,
+                [`/participants/${currentTournamentId}/${winnerId}/status`]: 'Winner', [`/users/${winnerId}/wallet_balance`]: newBalance,
+                [`/transactions/${winnerId}/${db.ref().child('transactions').push().key}`]: {
+                    amount: tournament.prize_pool, type: 'credit', description: `Won: ${tournament.title}`, created_at: new Date().toISOString()
+                }
+            };
+            await db.ref().update(updates);
+            showToast('Winner declared!');
+            renderAdminManageTournamentPage(document.getElementById('adminManageTournamentPage'));
+        }
+
+        // NEW PAGE: Admin App Settings
+        async function renderAdminAppSettingsPage(container) {
+            container.innerHTML = `
+                <div class="p-4 bg-orange-50 min-h-screen">
+                    <div class="flex items-center gap-4 mb-4">
+                        <button onclick="navigateTo('adminSettingsPage')" class="text-gray-500"><i class="fas fa-arrow-left fa-lg"></i></button>
+                        <h2 class="text-2xl font-black text-gray-800">Global App Settings</h2>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-md border border-orange-100">
+                        <p class="text-gray-600 mb-4">Manage global configurations for the user application.</p>
+                        <form id="appSettingsForm" class="space-y-4">
+                            <label class="block"><span class="text-gray-700 text-sm">Admin Deposit Number:</span>
+                                <input type="text" id="setting-admin-deposit-number" placeholder="e.g., 03101234567" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                            </label>
+                            <label class="block"><span class="text-gray-700 text-sm">Minimum Withdrawal Amount (PKR):</span>
+                                <input type="number" id="setting-min-withdrawal-amount" placeholder="e.g., 120" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                            </label>
+                            <label class="block"><span class="text-gray-700 text-sm">Referral Bonus Amount (PKR):</span>
+                                <input type="number" id="setting-referral-bonus-amount" placeholder="e.g., 25" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                            </label>
+                            <label class="block"><span class="text-gray-700 text-sm">Signup Bonus Amount (PKR):</span>
+                                <input type="number" id="setting-signup-bonus-amount" placeholder="e.g., 80" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500" required>
+                            </label>
+                            <button type="submit" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-700 hover:to-yellow-600 p-3 rounded-lg font-bold shadow-md transition-all">Save Settings</button>
+                        </form>
+                    </div>
+                </div>
+            `;
+            const appSettingsSnap = await db.ref('app_settings').once('value');
+            const appSettings = appSettingsSnap.val();
+            if (appSettings) {
+                document.getElementById('setting-admin-deposit-number').value = appSettings.adminDepositNumber || '';
+                document.getElementById('setting-min-withdrawal-amount').value = appSettings.minWithdrawalAmount || '';
+                document.getElementById('setting-referral-bonus-amount').value = appSettings.referralBonusAmount || '';
+                document.getElementById('setting-signup-bonus-amount').value = appSettings.signupBonusAmount || '';
+            }
+            document.getElementById('appSettingsForm').addEventListener('submit', updateAppSettings);
+        }
+
+        async function updateAppSettings(e) {
+            e.preventDefault();
+            const newSettings = {
+                adminDepositNumber: document.getElementById('setting-admin-deposit-number').value.trim(),
+                minWithdrawalAmount: Number(document.getElementById('setting-min-withdrawal-amount').value),
+                referralBonusAmount: Number(document.getElementById('setting-referral-bonus-amount').value),
+                signupBonusAmount: Number(document.getElementById('setting-signup-bonus-amount').value),
+                last_updated: new Date().toISOString(),
+                updated_by: currentAdminData.uid
+            };
+            try {
+                await db.ref('app_settings').update(newSettings);
+                showToast('App settings updated successfully!');
+            } catch (error) {
+                console.error("Error updating app settings:", error);
+                showToast('Failed to update app settings. ' + error.message, true);
+            }
+        }
+
+        // NEW PAGE: Admin Live Game Page
+        async function renderAdminLiveGamePage(container) {
+            container.innerHTML = `
+                <div class="p-4 bg-orange-50 min-h-screen">
+                    <div class="flex items-center gap-4 mb-4">
+                        <button onclick="navigateTo('adminSettingsPage')" class="text-gray-500"><i class="fas fa-arrow-left fa-lg"></i></button>
+                        <h2 class="text-2xl font-black text-gray-800">Manage Live Game Status</h2>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-md border border-orange-100">
+                        <p class="text-gray-600 mb-4">Configure details for any currently live game or event.</p>
+                        <form id="liveGameForm" class="space-y-4">
+                            <label class="block"><span class="text-gray-700 text-sm">Game Title (Optional):</span>
+                                <input type="text" id="live-game-title" placeholder="e.g., Live PUBG Stream" class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500">
+                            </label>
+                            <label class="block"><span class="text-gray-700 text-sm">Stream/Game URL (Optional):</span>
+                                <input type="url" id="live-game-url" placeholder="e.g., https://youtube.com/live/..." class="w-full p-3 bg-gray-50 rounded border border-gray-200 focus:outline-none focus:border-red-500">
+                            </label>
+                            <label class="block"><span class="text-gray-700 text-sm">Status:</span>
+                                <select id="live-game-status" class="w-full p-3 bg-gray-50 rounded border border-gray-200 text-gray-700">
+                                    <option value="inactive">Inactive</option>
+                                    <option value="live">Live Now</option>
+                                    <option value="upcoming">Upcoming</option>
+                                </select>
+                            </label>
+                            <button type="submit" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-700 hover:to-yellow-600 p-3 rounded-lg font-bold shadow-md transition-all">Update Live Game</button>
+                            <button type="button" onclick="clearLiveGame()" class="w-full bg-gray-200 text-gray-700 p-3 rounded-lg font-bold shadow-md transition-all">Clear Live Game</button>
+                        </form>
+                    </div>
+                    <div class="mt-6 bg-white p-4 rounded-xl shadow-md border border-orange-100">
+                        <h3 class="font-bold text-lg text-gray-700">Current Live Game Info</h3>
+                        <p id="current-live-game-info" class="text-gray-600 italic">No live game info available.</p>
+                    </div>
+                </div>
+            `;
+            // Load existing data
+            db.ref('live_game').on('value', snap => {
+                const liveGameData = snap.val();
+                if (liveGameData) {
+                    document.getElementById('live-game-title').value = liveGameData.title || '';
+                    document.getElementById('live-game-url').value = liveGameData.url || '';
+                    document.getElementById('live-game-status').value = liveGameData.status || 'inactive';
+                    document.getElementById('current-live-game-info').innerHTML = `
+                        <strong>Title:</strong> ${liveGameData.title || 'N/A'}<br>
+                        <strong>URL:</strong> <a href="${liveGameData.url}" target="_blank" class="text-blue-500">${liveGameData.url || 'N/A'}</a><br>
+                        <strong>Status:</strong> ${liveGameData.status ? liveGameData.status.toUpperCase() : 'N/A'}
+                    `;
+                } else {
+                    document.getElementById('live-game-title').value = '';
+                    document.getElementById('live-game-url').value = '';
+                    document.getElementById('live-game-status').value = 'inactive';
+                    document.getElementById('current-live-game-info').textContent = 'No live game info available.';
+                }
+            });
+            document.getElementById('liveGameForm').addEventListener('submit', updateLiveGame);
+        }
+
+        async function updateLiveGame(e) {
+            e.preventDefault();
+            const liveGameData = {
+                title: document.getElementById('live-game-title').value.trim(),
+                url: document.getElementById('live-game-url').value.trim(),
+                status: document.getElementById('live-game-status').value,
+                last_updated: new Date().toISOString(),
+                updated_by: currentAdminData.uid
+            };
+            try {
+                await db.ref('live_game').update(liveGameData);
+                showToast('Live game status updated successfully!');
+            } catch (error) {
+                console.error("Error updating live game:", error);
+                showToast('Failed to update live game. ' + error.message, true);
+            }
+        }
+
+        async function clearLiveGame() {
+            if (confirm('Are you sure you want to clear all live game information?')) {
+                try {
+                    await db.ref('live_game').remove();
+                    showToast('Live game information cleared!');
+                } catch (error) {
+                    console.error("Error clearing live game:", error);
+                    showToast('Failed to clear live game. ' + error.message, true);
+                }
+            }
+        }
+
+        // NEW PAGE: Admin Game Logs Page (Read-only)
+        async function renderAdminGameLogsPage(container) {
+            container.innerHTML = `
+                <div class="p-4 bg-orange-50 min-h-screen">
+                    <div class="flex items-center gap-4 mb-4">
+                        <button onclick="navigateTo('adminSettingsPage')" class="text-gray-500"><i class="fas fa-arrow-left fa-lg"></i></button>
+                        <h2 class="text-2xl font-black text-gray-800">All Game Logs</h2>
+                    </div>
+                    <div id="game-logs-list" class="space-y-3">
+                        <p class="text-center text-gray-400 italic">Loading game logs...</p>
+                    </div>
+                </div>
+            `;
+            const listEl = document.getElementById('game-logs-list');
+            db.ref('ludo_game_logs').on('value', snap => { // Assuming 'ludo_game_logs' for demo
+                const logs = snap.val();
+                if (!logs) { listEl.innerHTML = `<p class="text-center text-gray-400 italic">No game logs found.</p>`; return; }
+                let logsHtml = '';
+                const logsArray = Object.entries(logs).map(([id, log]) => ({id, ...log}));
+                logsArray.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)); // Sort newest first
+
+                logsArray.forEach(log => {
+                    logsHtml += `
+                        <div class="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
+                            <p class="font-bold text-gray-800">Game: ${log.gameName || 'N/A'} - User: ${log.username || 'N/A'}</p>
+                            <p class="text-sm text-gray-600">Event: ${log.event || 'N/A'}</p>
+                            <p class="text-xs text-gray-500">${new Date(log.timestamp).toLocaleString()}</p>
+                        </div>
+                    `;
+                });
+                listEl.innerHTML = logsHtml;
+            });
+        }
+        
+        // NEW PAGE: Admin Transactions Page (Read-only)
+        async function renderAdminTransactionsPage(container) {
+            container.innerHTML = `
+                <div class="p-4 bg-orange-50 min-h-screen">
+                    <div class="flex items-center gap-4 mb-4">
+                        <button onclick="navigateTo('adminSettingsPage')" class="text-gray-500"><i class="fas fa-arrow-left fa-lg"></i></button>
+                        <h2 class="text-2xl font-black text-gray-800">All User Transactions</h2>
+                    </div>
+                    <div id="all-transactions-list" class="space-y-3">
+                        <p class="text-center text-gray-400 italic">Loading transactions...</p>
+                    </div>
+                </div>
+            `;
+            const listEl = document.getElementById('all-transactions-list');
+            db.ref('transactions').on('value', async snap => {
+                const transactionsByUser = snap.val();
+                if (!transactionsByUser) { listEl.innerHTML = `<p class="text-center text-gray-400 italic">No transactions found.</p>`; return; }
+                
+                let allTransactions = [];
+                for (const userId in transactionsByUser) {
+                    const userSnap = await db.ref(`users/${userId}`).once('value');
+                    const userData = userSnap.val() || { username: 'Unknown User' };
+
+                    for (const transactionId in transactionsByUser[userId]) {
+                        const transaction = transactionsByUser[userId][transactionId];
+                        allTransactions.push({
+                            id: transactionId,
+                            userId: userId,
+                            username: userData.username,
+                            ...transaction
+                        });
+                    }
+                }
+                allTransactions.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)); // Sort newest first
+
+                let transactionsHtml = '';
+                allTransactions.forEach(t => {
+                    const amountClass = t.type === 'credit' ? 'text-green-600' : 'text-red-600';
+                    const icon = t.type === 'credit' ? 'fas fa-arrow-up' : 'fas fa-arrow-down';
+                    transactionsHtml += `
+                        <div class="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
+                            <p class="font-bold text-gray-800"><i class="${icon} ${amountClass} mr-2"></i> ${t.description}</p>
+                            <p class="text-sm text-gray-600">User: ${t.username} (UID: ${t.userId})</p>
+                            <p class="text-sm font-bold ${amountClass}">${t.type === 'credit' ? '+' : '-'}${formatCurrency(t.amount)}</p>
+                            <p class="text-xs text-gray-500">${new Date(t.created_at).toLocaleString()}</p>
+                        </div>
+                    `;
+                });
+                listEl.innerHTML = transactionsHtml;
+            });
+        }
+
+        // NEW PAGE: Admin Video Content Page (CRUD)
+        async function renderAdminVideoContentPage(container) {
+            container.innerHTML = `
+                <div class="p-4 bg-orange-50 min-h-screen">
+                    <div class="flex items-center gap-4 mb-4">
+                        <button onclick="navigateTo('adminSettingsPage')" class="text-gray-500"><i class="fas fa-arrow-left fa-lg"></i></button>
+                        <h2 class="text-2xl font-black text-gray-800">Manage Video Sections</h2>
+                    </div>
+                    
+                    <div class="bg-white p-4 rounded-xl shadow-md border border-orange-100 mb-6">
+                        <h3 class="font-bold text-lg mb-3 text-red-600">Add New Video Section</h3>
+                        <form id="addVideoSectionForm" class="space-y-3">
+                            <input type="text" id="add-video-section-title" placeholder="Section Title (e.g., Tutorials)" class="w-full p-2 bg-gray-50 rounded border border-gray-200" required>
+                            <textarea id="add-video-section-description" rows="2" placeholder="Section Description (optional)" class="w-full p-2 bg-gray-50 rounded border border-gray-200"></textarea>
+                            <input type="url" id="add-video-section-url" placeholder="YouTube Embed URL" class="w-full p-2 bg-gray-50 rounded border border-gray-200" required>
+                            <input type="number" id="add-video-section-time" placeholder="Watch Time (seconds)" class="w-full p-2 bg-gray-50 rounded border border-gray-200" required>
+                            <input type="number" id="add-video-section-reward" placeholder="Reward (PKR)" class="w-full p-2 bg-gray-50 rounded border border-gray-200" required>
+                            <button type="submit" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 p-2 rounded-lg font-bold">Add Section</button>
+                        </form>
+                    </div>
+
+                    <h3 class="font-bold text-lg text-gray-700">Existing Video Sections</h3>
+                    <div id="video-sections-list" class="space-y-3">
+                        <p class="text-center text-gray-400 italic">Loading video sections...</p>
+                    </div>
+                </div>
+            `;
+            
+            const listEl = document.getElementById('video-sections-list');
+            db.ref('video_sections').on('value', snap => {
+                const sections = snap.val();
+                if (!sections) { listEl.innerHTML = `<p class="text-center text-gray-400 italic">No video sections found.</p>`; return; }
+                let sectionsHtml = '';
+                for (const id in sections) {
+                    const section = sections[id];
+                    sectionsHtml += `
+                        <div class="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
+                            <div class="flex items-start justify-between">
+                                <div>
+                                    <p class="font-bold text-gray-800">${escapeJsStringForHtmlAttribute(section.title)}</p>
+                                    <p class="text-sm text-gray-500 truncate max-w-[200px]">${escapeJsStringForHtmlAttribute(section.description || 'No description')}</p>
+                                    <p class="text-xs text-blue-500 mt-1">URL: ${escapeJsStringForHtmlAttribute(section.youtubeUrl || 'Not set')}</p>
+                                    <div class="flex gap-4 mt-2">
+                                        <span class="text-xs font-semibold text-gray-600"><i class="fas fa-clock mr-1"></i>${section.watchTimeSeconds || 0}s</span>
+                                        <span class="text-xs font-semibold text-green-600"><i class="fas fa-coins mr-1"></i>PKR ${section.rewardPkr || 0}</span>
+                                    </div>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button onclick="openEditVideoSectionModal('${escapeJsStringForHtmlAttribute(id)}', '${escapeJsStringForHtmlAttribute(section.title)}', \`${escapeJsStringForHtmlAttribute(section.description || '')}\`, '${escapeJsStringForHtmlAttribute(section.youtubeUrl || '')}', '${section.watchTimeSeconds || 0}', '${section.rewardPkr || 0}')" class="text-blue-500 bg-blue-50 p-2 rounded hover:bg-blue-100 text-sm"><i class="fas fa-edit"></i></button>
+                                    <button onclick="deleteVideoSection('${escapeJsStringForHtmlAttribute(id)}', '${escapeJsStringForHtmlAttribute(section.title)}')" class="text-red-500 bg-red-50 p-2 rounded hover:bg-red-100 text-sm"><i class="fas fa-trash"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+                listEl.innerHTML = sectionsHtml;
+            });
+
+            document.getElementById('addVideoSectionForm').addEventListener('submit', addVideoSection);
+            document.getElementById('editVideoSectionForm').addEventListener('submit', updateVideoSection); // Attach to the modal form
+        }
+
+        async function addVideoSection(e) {
+            e.preventDefault();
+            const newSection = {
+                title: document.getElementById('add-video-section-title').value.trim(),
+                description: document.getElementById('add-video-section-description').value.trim(),
+                youtubeUrl: document.getElementById('add-video-section-url').value.trim(),
+                watchTimeSeconds: Number(document.getElementById('add-video-section-time').value),
+                rewardPkr: Number(document.getElementById('add-video-section-reward').value),
+                created_at: new Date().toISOString(),
+                created_by: currentAdminData.uid
+            };
+            try {
+                await db.ref('video_sections').push(newSection);
+                showToast('Video section added successfully!');
+                e.target.reset();
+            } catch (error) {
+                console.error("Error adding video section:", error);
+                showToast('Failed to add video section. ' + error.message, true);
+            }
+        }
+
+        function openEditVideoSectionModal(id, title, description, youtubeUrl, watchTime, reward) {
+            document.getElementById('edit-video-section-id').value = id;
+            document.getElementById('edit-video-section-title').value = title;
+            document.getElementById('edit-video-section-description').value = description;
+            document.getElementById('edit-video-section-url').value = youtubeUrl;
+            document.getElementById('edit-video-section-time').value = watchTime;
+            document.getElementById('edit-video-section-reward').value = reward;
+            toggleModal('editVideoSectionModal', true);
+        }
+
+        async function updateVideoSection(e) {
+            e.preventDefault();
+            const id = document.getElementById('edit-video-section-id').value;
+            const updatedSection = {
+                title: document.getElementById('edit-video-section-title').value.trim(),
+                description: document.getElementById('edit-video-section-description').value.trim(),
+                youtubeUrl: document.getElementById('edit-video-section-url').value.trim(),
+                watchTimeSeconds: Number(document.getElementById('edit-video-section-time').value),
+                rewardPkr: Number(document.getElementById('edit-video-section-reward').value),
+                last_updated: new Date().toISOString(),
+                updated_by: currentAdminData.uid
+            };
+            try {
+                await db.ref(`video_sections/${id}`).update(updatedSection);
+                showToast('Video section updated successfully!');
+                toggleModal('editVideoSectionModal', false);
+            } catch (error) {
+                console.error("Error updating video section:", error);
+                showToast('Failed to update video section. ' + error.message, true);
+            }
+        }
+
+        async function deleteVideoSection(id, title) {
+            if (confirm(`Are you sure you want to delete the video section "${title}"? This will also remove any videos within it.`)) {
+                try {
+                    await db.ref(`video_sections/${id}`).remove();
+                    showToast('Video section deleted successfully!');
+                } catch (error) {
+                    console.error("Error deleting video section:", error);
+                    showToast('Failed to delete video section. ' + error.message, true);
+                }
+            }
+        }
+
+        // NEW PAGE: Admin Video Watch Logs Page (Read-only)
+        async function renderAdminVideoWatchLogsPage(container) {
+            container.innerHTML = `
+                <div class="p-4 bg-orange-50 min-h-screen">
+                    <div class="flex items-center gap-4 mb-4">
+                        <button onclick="navigateTo('adminSettingsPage')" class="text-gray-500"><i class="fas fa-arrow-left fa-lg"></i></button>
+                        <h2 class="text-2xl font-black text-gray-800">Video Watch Logs</h2>
+                    </div>
+                    <div id="video-watch-logs-list" class="space-y-3">
+                        <p class="text-center text-gray-400 italic">Loading video watch logs...</p>
+                    </div>
+                </div>
+            `;
+            const listEl = document.getElementById('video-watch-logs-list');
+            db.ref('video_watch_logs').on('value', async snap => {
+                const logs = snap.val();
+                if (!logs) { listEl.innerHTML = `<p class="text-center text-gray-400 italic">No video watch logs found.</p>`; return; }
+                let logsHtml = '';
+                const logsArray = [];
+                for (const userId in logs) {
+                    const userSnap = await db.ref(`users/${userId}`).once('value');
+                    const userData = userSnap.val() || { username: 'Unknown User' };
+                    for (const logId in logs[userId]) {
+                        const log = logs[userId][logId];
+                        logsArray.push({
+                            id: logId,
+                            userId: userId,
+                            username: userData.username,
+                            ...log
+                        });
+                    }
+                }
+                logsArray.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)); // Sort newest first
+
+                logsArray.forEach(log => {
+                    logsHtml += `
+                        <div class="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
+                            <p class="font-bold text-gray-800">User: ${log.username || 'N/A'} (UID: ${log.userId})</p>
+                            <p class="text-sm text-gray-600">Video: ${log.videoTitle || 'N/A'} in section "${log.sectionTitle || 'N/A'}"</p>
+                            <p class="text-xs text-gray-500">Watched: ${log.durationSeconds ? `${log.durationSeconds}s` : 'N/A'} at ${new Date(log.timestamp).toLocaleString()}</p>
+                        </div>
+                    `;
+                });
+                listEl.innerHTML = logsHtml;
+            });
+        }
+
+        // NEW PAGE: Admin Worker Earnings Page (CRUD)
+        async function renderAdminWorkerEarningsPage(container) {
+            container.innerHTML = `
+                <div class="p-4 bg-orange-50 min-h-screen">
+                    <div class="flex items-center gap-4 mb-4">
+                        <button onclick="navigateTo('adminSettingsPage')" class="text-gray-500"><i class="fas fa-arrow-left fa-lg"></i></button>
+                        <h2 class="text-2xl font-black text-gray-800">Manage Worker Earnings</h2>
+                    </div>
+                    
+                    <div class="bg-white p-4 rounded-xl shadow-md border border-orange-100 mb-6">
+                        <h3 class="font-bold text-lg mb-3 text-red-600">Add New Earning Request</h3>
+                        <form id="addEarningRequestForm" class="space-y-3">
+                            <label class="block"><span class="text-gray-700 text-sm">User Email/Username:</span>
+                                <input type="text" id="earning-user-identifier" placeholder="Enter user's email or username" class="w-full p-2 bg-gray-50 rounded border border-gray-200" required>
+                            </label>
+                            <label class="block"><span class="text-gray-700 text-sm">Amount (PKR):</span>
+                                <input type="number" id="earning-amount" placeholder="e.g., 50" class="w-full p-2 bg-gray-50 rounded border border-gray-200" required>
+                            </label>
+                            <label class="block"><span class="text-gray-700 text-sm">Description:</span>
+                                <input type="text" id="earning-description" placeholder="e.g., Ad Watch Bonus" class="w-full p-2 bg-gray-50 rounded border border-gray-200" required>
+                            </label>
+                            <button type="submit" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 p-2 rounded-lg font-bold">Add Request</button>
+                        </form>
+                    </div>
+
+                    <h3 class="font-bold text-lg text-gray-700">All Worker Earnings</h3>
+                    <div id="worker-earnings-list" class="space-y-3">
+                        <p class="text-center text-gray-400 italic">Loading earnings...</p>
+                    </div>
+                </div>
+            `;
+            const listEl = document.getElementById('worker-earnings-list');
+            db.ref('worker_earnings').on('value', async snap => {
+                const earnings = snap.val();
+                if (!earnings) { listEl.innerHTML = `<p class="text-center text-gray-400 italic">No worker earnings found.</p>`; return; }
+                let earningsHtml = '';
+                const earningsArray = [];
+                // Fetch all user data once for efficiency
+                const allUsersSnap = await db.ref('users').once('value');
+                const allUsers = allUsersSnap.val() || {};
+
+                for (const id in earnings) {
+                    const earning = earnings[id];
+                    let username = 'N/A';
+                    let email = 'N/A';
+                    if (earning.userId && allUsers[earning.userId]) {
+                        username = allUsers[earning.userId].username || 'N/A';
+                        email = allUsers[earning.userId].email || 'N/A';
+                    }
+                    earningsArray.push({ id, username, email, ...earning });
+                }
+                earningsArray.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)); // Sort newest first
+
+                earningsArray.forEach(earning => {
+                    const statusClass = earning.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : (earning.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800');
+                    earningsHtml += `
+                        <div class="bg-white p-3 rounded-lg shadow-sm border border-gray-100 flex items-center justify-between">
+                            <div>
+                                <p class="font-bold text-gray-800">${escapeJsStringForHtmlAttribute(earning.description)} - ${formatCurrency(earning.amount)}</p>
+                                <p class="text-sm text-gray-600">User: ${escapeJsStringForHtmlAttribute(earning.username)} (${escapeJsStringForHtmlAttribute(earning.email)})</p>
+                                <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${statusClass}">${earning.status.toUpperCase()}</span>
+                                <p class="text-xs text-gray-500 mt-1">${new Date(earning.created_at).toLocaleString()}</p>
+                            </div>
+                            <div class="flex flex-col gap-2">
+                                ${earning.status === 'pending' ? `
+                                <button onclick="approveWorkerEarning('${escapeJsStringForHtmlAttribute(earning.id)}', '${escapeJsStringForHtmlAttribute(earning.userId)}', ${earning.amount})" class="bg-green-500 text-white px-3 py-1 rounded text-sm font-semibold">Approve</button>
+                                <button onclick="rejectWorkerEarning('${escapeJsStringForHtmlAttribute(earning.id)}')" class="bg-red-500 text-white px-3 py-1 rounded text-sm font-semibold">Reject</button>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+                listEl.innerHTML = earningsHtml;
+            });
+            document.getElementById('addEarningRequestForm').addEventListener('submit', addWorkerEarningRequest);
+        }
+
+        async function addWorkerEarningRequest(e) {
+            e.preventDefault();
+            const userIdentifier = document.getElementById('earning-user-identifier').value.trim();
+            const amount = Number(document.getElementById('earning-amount').value);
+            const description = document.getElementById('earning-description').value.trim();
+
+            if (!userIdentifier || amount <= 0 || !description) {
+                showToast('All fields are required and amount must be positive!', true);
+                return;
+            }
+
+            let userId = null;
+            // First, try to find by email
+            const usersSnapByEmail = await db.ref('users').orderByChild('email').equalTo(userIdentifier).once('value');
+            if (usersSnapByEmail.exists()) {
+                userId = Object.keys(usersSnapByEmail.val())[0];
+            } else {
+                // If not by email, try by username
+                const usernameSnap = await db.ref('usernames/' + userIdentifier.toLowerCase()).once('value');
+                if (usernameSnap.exists()) {
+                    userId = usernameSnap.val();
+                }
+            }
+
+            if (!userId) {
+                showToast('User not found by email or username!', true);
+                return;
+            }
+            
+            const newEarningRequest = {
+                userId: userId,
+                amount: amount,
+                description: description,
+                status: 'pending',
+                created_at: new Date().toISOString(),
+                admin_uid: currentAdminData.uid
+            };
+
+            try {
+                await db.ref('worker_earnings').push(newEarningRequest);
+                showToast('Earning request added successfully!');
+                e.target.reset();
+            } catch (error) {
+                console.error("Error adding earning request:", error);
+                showToast('Failed to add earning request. ' + error.message, true);
+            }
+        }
+
+        async function approveWorkerEarning(earningId, userId, amount) {
+            if (confirm(`Approve this earning of ${formatCurrency(amount)} for the user? This will add funds to their wallet.`)) {
+                const userWalletRef = db.ref(`users/${userId}/wallet_balance`);
+                userWalletRef.transaction((currentBalance) => {
+                    return (currentBalance || 0) + amount;
+                }, async (error, committed, snapshot) => {
+                    if (error) {
+                        showToast('Earning approval failed: ' + error.message, true);
+                    } else if (committed) {
+                        await db.ref(`worker_earnings/${earningId}`).update({ status: 'approved', approved_at: new Date().toISOString() });
+                        await db.ref(`transactions/${userId}`).push({
+                            amount: amount,
+                            type: 'credit',
+                            description: 'Worker Earning Approved',
+                            created_at: new Date().toISOString(),
+                            admin_uid: currentAdminData.uid
+                        });
+                        showToast('Worker earning approved and wallet updated!');
+                    }
+                });
+            }
+        }
+
+        async function rejectWorkerEarning(earningId) {
+            if (confirm('Are you sure you want to reject this earning request?')) {
+                try {
+                    await db.ref(`worker_earnings/${earningId}`).update({ status: 'rejected', rejected_at: new Date().toISOString() });
+                    showToast('Worker earning request rejected!');
+                } catch (error) {
+                    console.error("Error rejecting earning request:", error);
+                    showToast('Failed to reject earning request. ' + error.message, true);
+                }
+            }
+        }
+
+
+    </script>
 </body>
 </html>
