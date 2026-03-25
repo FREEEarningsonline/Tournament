@@ -1,3 +1,4 @@
+
 // Firebase Configuration (DO NOT modify these values directly if they are sensitive)
 const firebaseConfig = {
     apiKey: "AIzaSyDR2OugzoVNnKN6OUKsPxC9ajldlhanteE",
@@ -18,6 +19,7 @@ const db = firebase.database();
 let currentUserData = null;
 let pendingAction = null; // To store action after login
 let unreadNotificationsCount = 0; // Global counter for unread notifications
+let videoRewardTimer = null; // NEW: Timer for video rewards
 
 // Dynamic app settings (will be loaded from Firebase, with defaults)
 let adminDepositNumber = '03105784772';
@@ -29,11 +31,21 @@ let signupBonusAmount = 80;
 /**
  * Navigates to a specified page and updates the navigation bar.
  * @param {string} pageId - The ID of the page to navigate to.
+ * @param {object} [data=null] - Optional data to pass to the rendering function.
  */
-function navigateTo(pageId) {
+function navigateTo(pageId, data = null) {
+    // NEW: Clear any running video timer when navigating away from the video page
+    if (videoRewardTimer) {
+        clearInterval(videoRewardTimer);
+        videoRewardTimer = null;
+    }
+
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    document.getElementById(pageId)?.classList.add('active');
-    loadPageContent(pageId); // Load content for the new active page
+    const pageElement = document.getElementById(pageId);
+    if(pageElement) {
+        pageElement.classList.add('active');
+        loadPageContent(pageId, data); // Load content for the new active page, passing data
+    }
 
     document.querySelectorAll('.nav-item').forEach(item => {
         const isActive = item.getAttribute('onclick').includes(pageId);
@@ -282,7 +294,7 @@ auth.onAuthStateChanged(async user => {
                 }
             }
 
-            // NEW: Check for game deletion notifications upon login/app load
+            // Check for game deletion notifications upon login/app load
             checkAndDisplayGameDeletionNotifications(user.uid);
 
             const initialPageId = document.querySelector('.page.active')?.id || 'homePage';
@@ -347,8 +359,9 @@ async function checkAndDisplayGameDeletionNotifications(userId) {
 /**
  * Loads content into the main content area based on the pageId.
  * @param {string} pageId - The ID of the page to load content for.
+ * @param {object} [data=null] - Optional data to pass to the rendering function.
  */
-function loadPageContent(pageId) {
+function loadPageContent(pageId, data = null) {
     const pageContainer = document.getElementById(pageId);
     if (!pageContainer) return;
     switch (pageId) {
@@ -357,7 +370,8 @@ function loadPageContent(pageId) {
         case 'myTournamentsPage': renderMyTournamentsPage(pageContainer); break;
         case 'walletPage': renderWalletPage(pageContainer); break;
         case 'profilePage': renderProfilePage(pageContainer); break;
-        case 'notificationsPage': renderNotificationsPage(pageContainer); break; // Render Notifications Page
+        case 'notificationsPage': renderNotificationsPage(pageContainer); break;
+        case 'videoPlayerPage': renderVideoPlayerPage(pageContainer, data); break; // NEW: Render Video Player Page
     }
 }
 
@@ -466,7 +480,7 @@ async function renderHomePage(container) {
         gamesByCategoryContainer.innerHTML = gamesHtml; // Replace spinner with actual content
     });
 
-    // NEW: Load Live Game Info
+    // Load Live Game Info
     const liveEventContentEl = document.getElementById('live-event-content');
     db.ref('live_game').on('value', snap => {
         const liveGameData = snap.val();
@@ -495,7 +509,7 @@ async function renderHomePage(container) {
         }
     });
 
-    // NEW: Load Video Content Sections
+    // Load Video Content Sections
     const videoSectionsListHomeEl = document.getElementById('video-sections-list-home');
     db.ref('video_sections').on('value', snap => {
         const sections = snap.val();
@@ -508,11 +522,19 @@ async function renderHomePage(container) {
         sectionsArray.sort((a, b) => a.title.localeCompare(b.title)); // Sort alphabetically
 
         sectionsArray.forEach(section => {
+            const safeSection = {
+                id: escapeJsStringForHtmlAttribute(section.id),
+                title: escapeJsStringForHtmlAttribute(section.title),
+                description: escapeJsStringForHtmlAttribute(section.description),
+                youtubeUrl: escapeJsStringForHtmlAttribute(section.youtubeUrl),
+                watchTimeSeconds: section.watchTimeSeconds,
+                rewardPkr: section.rewardPkr
+            };
             sectionsHtml += `
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-green-100 flex items-center justify-between cursor-pointer hover:bg-green-50 transition-colors">
+                <div onclick='navigateTo("videoPlayerPage", ${JSON.stringify(safeSection)})' class="bg-white p-3 rounded-xl shadow-sm border border-green-100 flex items-center justify-between cursor-pointer hover:bg-green-50 transition-colors">
                     <div>
-                        <h4 class="font-bold text-gray-800">${escapeJsStringForHtmlAttribute(section.title)}</h4>
-                        <p class="text-sm text-gray-600">${escapeJsStringForHtmlAttribute(section.description || 'No description')}</p>
+                        <h4 class="font-bold text-gray-800">${safeSection.title}</h4>
+                        <p class="text-sm text-gray-600">${safeSection.description || 'No description'}</p>
                     </div>
                     <i class="fas fa-chevron-right text-gray-400"></i>
                 </div>
@@ -537,7 +559,7 @@ async function renderHomePage(container) {
             return `
                         <div class="bg-gradient-to-br from-red-50 to-yellow-50 rounded-xl shadow-md border border-red-100 overflow-hidden">
                             <div class="p-4 flex justify-between items-start border-b border-red-100/50">
-                                <div><h3 class="font-bold text-lg text-red-900">${escapeJsStringForHtmlAttribute(t.title)}</h3><span class="text-xs font-bold text-white bg-gradient-to-r from-red-500 to-orange-500 px-3 py-1 rounded-full shadow-sm">${formatCurrency(t.prize_pool)} Pool</span>
+                                <div><h3 class="font-bold text-lg text-red-900">${t.title}</h3><span class="text-xs font-bold text-white bg-gradient-to-r from-red-500 to-orange-500 px-3 py-1 rounded-full shadow-sm">${formatCurrency(t.prize_pool)} Pool</span>
                             </div>
                             <div class="p-4 grid grid-cols-2 gap-4 text-sm">
                                 <div class="bg-white/60 p-2 rounded border border-red-100"><p class="text-gray-500 text-xs">Entry Fee</p><p class="font-bold text-gray-800">${formatCurrency(t.entry_fee)}</p></div>
@@ -550,6 +572,194 @@ async function renderHomePage(container) {
         }).join('');
     }
 }
+
+/**
+ * Helper function to convert a standard YouTube URL to an embeddable URL.
+ * @param {string} url - The original YouTube URL.
+ * @returns {string} The embeddable URL.
+ */
+function convertYouTubeUrlToEmbed(url) {
+    if (!url) return '';
+    let videoId = '';
+    
+    try {
+        if (url.includes('youtube.com/watch?v=')) {
+            videoId = url.split('v=')[1].split('&')[0];
+        } else if (url.includes('youtu.be/')) {
+            videoId = url.split('youtu.be/')[1].split('?')[0];
+        } else if (url.includes('youtube.com/embed/')) {
+            return url; // Already an embed URL
+        }
+        
+        return videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0` : url;
+    } catch(e) {
+        console.error("Error converting YouTube URL:", e);
+        return url; // Return original if parsing fails
+    }
+}
+
+/**
+ * Renders the Video Player Page dynamically.
+ * @param {HTMLElement} container - The container element.
+ * @param {object} data - The video section data.
+ */
+async function renderVideoPlayerPage(container, data) {
+    if (!data) {
+        container.innerHTML = `<div class="p-4 text-center mt-10">Error: No video data found. <button onclick="navigateTo('homePage')" class="text-blue-500 underline mt-2 block">Go Back</button></div>`;
+        return;
+    }
+
+    const embedUrl = convertYouTubeUrlToEmbed(data.youtubeUrl);
+    const watchTime = parseInt(data.watchTimeSeconds) || 0;
+    const reward = parseInt(data.rewardPkr) || 0;
+
+    container.innerHTML = `
+        <div class="bg-black min-h-screen text-white flex flex-col pb-20">
+            <div class="p-4 flex items-center gap-4 bg-gray-900 border-b border-gray-800 sticky top-0 z-10">
+                <button onclick="navigateTo('homePage')" class="text-gray-400 hover:text-white"><i class="fas fa-arrow-left fa-lg"></i></button>
+                <h2 class="text-lg font-bold truncate flex-1">${escapeJsStringForHtmlAttribute(data.title)}</h2>
+            </div>
+            
+            <div class="w-full aspect-video bg-black relative shadow-lg">
+                ${embedUrl 
+                    ? `<iframe src="${embedUrl}" class="w-full h-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>` 
+                    : `<div class="flex items-center justify-center h-full text-gray-500 italic">Invalid Video URL</div>`
+                }
+            </div>
+
+            <div class="p-5 flex-1 bg-gray-900">
+                <h3 class="text-xl font-bold mb-2 text-white">${escapeJsStringForHtmlAttribute(data.title)}</h3>
+                <p class="text-gray-400 text-sm mb-6">${escapeJsStringForHtmlAttribute(data.description || '')}</p>
+
+                <div class="bg-gray-800 rounded-xl p-5 border border-gray-700 shadow-inner">
+                    <div id="video-reward-status" class="text-center">
+                        ${auth.currentUser 
+                            ? `<p class="font-semibold text-yellow-400 mb-3 text-lg">Watch for <span id="video-timer-display" class="font-black text-2xl text-white mx-1">${watchTime}</span> seconds to earn PKR ${reward}!</p>
+                               <div class="w-full bg-gray-700 rounded-full h-3 mt-2 overflow-hidden shadow-inner">
+                                   <div id="video-progress-bar" class="bg-gradient-to-r from-red-500 to-yellow-500 h-3 rounded-full transition-all duration-1000 ease-linear" style="width: 0%"></div>
+                               </div>`
+                            : `<p class="text-gray-300 italic mb-3">Login is required to earn rewards for watching.</p>
+                               <button onclick="toggleModal('authModal', true)" class="bg-gradient-to-r from-red-600 to-yellow-500 text-white px-6 py-2 rounded-full font-bold shadow-md hover:shadow-lg transition-transform transform active:scale-95">Login Now</button>`
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    if (auth.currentUser && watchTime > 0 && reward > 0) {
+        startVideoRewardTimer(watchTime, reward, data.id, data.title, data.title); 
+    }
+}
+
+/**
+ * Handles the countdown timer for video rewards.
+ * @param {number} totalSeconds - Total time to watch.
+ * @param {number} rewardPkr - Reward amount.
+ * @param {string} videoId - Database ID of the video section.
+ * @param {string} videoTitle - Title of the video.
+ * @param {string} sectionTitle - Section title (often same as video title in this structure).
+ */
+function startVideoRewardTimer(totalSeconds, rewardPkr, videoId, videoTitle, sectionTitle) {
+    let timeLeft = totalSeconds;
+    const timerDisplay = document.getElementById('video-timer-display');
+    const progressBar = document.getElementById('video-progress-bar');
+    const statusContainer = document.getElementById('video-reward-status');
+
+    if (!timerDisplay || !progressBar || !statusContainer) return;
+
+    // Clear any existing timer
+    if (videoRewardTimer) clearInterval(videoRewardTimer);
+
+    videoRewardTimer = setInterval(async () => {
+        timeLeft--;
+        
+        if (timerDisplay) timerDisplay.textContent = timeLeft;
+        
+        if (progressBar) {
+            const percentage = ((totalSeconds - timeLeft) / totalSeconds) * 100;
+            progressBar.style.width = `${percentage}%`;
+        }
+
+        if (timeLeft <= 0) {
+            clearInterval(videoRewardTimer);
+            videoRewardTimer = null;
+            
+            statusContainer.innerHTML = `<p class="font-bold text-green-400 text-lg"><i class="fas fa-spinner fa-spin mr-2"></i>Claiming Reward...</p>`;
+            
+            await claimVideoReward(rewardPkr, videoId, videoTitle, sectionTitle, statusContainer);
+        }
+    }, 1000);
+}
+
+/**
+ * Claims the reward after the video timer finishes.
+ */
+async function claimVideoReward(rewardPkr, videoId, videoTitle, sectionTitle, statusContainer) {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    try {
+        // 1. Check if already claimed
+        const logRef = db.ref(`video_watch_logs/${user.uid}/${videoId}`);
+        const logSnap = await logRef.once('value');
+        
+        if (logSnap.exists()) {
+            statusContainer.innerHTML = `<p class="font-bold text-gray-400 text-lg"><i class="fas fa-check-circle text-green-500 mr-2"></i>Reward already claimed for this video.</p>`;
+            return;
+        }
+
+        // 2. Add funds via transaction
+        const walletRef = db.ref(`users/${user.uid}/wallet_balance`);
+        let committed = false;
+        
+        await walletRef.transaction(currentBalance => {
+            const balance = currentBalance !== null && typeof currentBalance === 'number' ? currentBalance : 0;
+            return balance + rewardPkr;
+        }, async (error, _committed, snapshot) => {
+            if (error) {
+                console.error('Video reward transaction failed', error);
+                statusContainer.innerHTML = `<p class="font-bold text-red-500">Failed to claim reward. Please try again later.</p>`;
+            } else if (_committed) {
+                committed = true;
+                
+                // 3. Log to transactions
+                await db.ref(`transactions/${user.uid}`).push({
+                    amount: rewardPkr,
+                    type: 'credit',
+                    description: `Video Reward: ${videoTitle}`,
+                    created_at: new Date().toISOString()
+                });
+
+                // 4. Log to video_watch_logs
+                await logRef.set({
+                    videoTitle: videoTitle,
+                    sectionTitle: sectionTitle,
+                    durationSeconds: rewardPkr, 
+                    rewardEarned: rewardPkr,
+                    timestamp: new Date().toISOString()
+                });
+
+                statusContainer.innerHTML = `<p class="font-bold text-green-400 text-xl animate-pulse"><i class="fas fa-gift mr-2 text-yellow-400"></i>PKR ${rewardPkr} added to wallet!</p>`;
+                showToast(`🎉 You earned PKR ${rewardPkr} for watching!`);
+                
+                // Force UI update
+                if (currentUserData) {
+                    currentUserData.wallet_balance = snapshot.val();
+                    const headerWalletBalanceEl = document.getElementById('header-wallet-balance');
+                    if (headerWalletBalanceEl) headerWalletBalanceEl.textContent = formatCurrency(currentUserData.wallet_balance);
+                }
+            } else {
+                statusContainer.innerHTML = `<p class="font-bold text-red-500">Transaction aborted.</p>`;
+            }
+        });
+
+    } catch (error) {
+        console.error("Error claiming video reward:", error);
+        statusContainer.innerHTML = `<p class="font-bold text-red-500">An error occurred while claiming.</p>`;
+    }
+}
+
 
 /**
  * Initiates playing a game URL, optionally as part of a tournament.
@@ -1435,10 +1645,9 @@ function attachLoginListeners() {
         }
     });
 }
+// --- END REFERRAL LOGIC ---
 
-/**
- * Handles the "Claim Daily Bonus" action.
- */
+// --- NEW FUNCTION: Claim Daily Bonus ---
 async function claimDailyBonus() {
     if (!auth.currentUser) {
         showToast('Login required to claim daily bonus!', true);
@@ -1477,7 +1686,7 @@ async function claimDailyBonus() {
         }
 
         // Generate random bonus between 10 and 1000 (inclusive)
-        const randomBonus = Math.floor(Math.random() * 91) + 10;
+        const randomBonus = Math.floor(Math.random() * 991) + 10;
         
         let committed = false;
         await userRef.transaction(data => {
@@ -1518,6 +1727,7 @@ async function claimDailyBonus() {
         window.open('https://toolswebsite205.blogspot.com', '_blank');
     }
 }
+// --- END NEW FUNCTION: Claim Daily Bonus ---
 
 /**
  * Attaches event listeners for the tabs on the My Tournaments page.
