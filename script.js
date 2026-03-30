@@ -19,7 +19,7 @@ const db = firebase.database();
 let currentUserData = null;
 let pendingAction = null; // To store action after login
 let unreadNotificationsCount = 0; // Global counter for unread notifications
-let videoRewardTimer = null; // NEW: Timer for video rewards
+let videoRewardTimer = null; // Timer for video rewards
 
 // Dynamic app settings (will be loaded from Firebase, with defaults)
 let adminDepositNumber = '03105784772';
@@ -27,6 +27,17 @@ let minWithdrawalAmount = 120;
 let referralBonusAmount = 25;
 let signupBonusAmount = 80;
 
+// Home Page specific global variables for dynamic loading
+let allApprovedGames = [];
+let gamesByCategory = {};
+let displayedCategories = []; // Tracks which categories are currently shown
+const CATEGORY_CHUNK_SIZE = 6; // Initial number of categories to show
+const GAME_CHUNK_SIZE = 4;     // Initial number of games per category
+let gamesDisplayedPerCategory = {}; // { 'Category Name': count, ... }
+
+let searchResults = [];
+const SEARCH_RESULT_CHUNK_SIZE = 10;
+let searchGamesDisplayed = 0;
 
 /**
  * Navigates to a specified page and updates the navigation bar.
@@ -64,8 +75,8 @@ function navigateTo(pageId, data = null) {
         const notificationBadge = document.getElementById('unread-notifications-count');
         if (isNotificationNav && notificationBadge) {
             if (unreadNotificationsCount > 0) {
-                notificationBadge.style.display = 'block';
                 notificationBadge.textContent = unreadNotificationsCount;
+                notificationBadge.style.display = 'block';
             } else {
                 notificationBadge.style.display = 'none';
             }
@@ -390,6 +401,178 @@ function escapeJsStringForHtmlAttribute(s) {
               .replace(/\r/g, '\\r');
 }
 
+/**
+ * Renders the game categories and games on the home page.
+ */
+function renderGameCategories() {
+    const gamesByCategoryList = document.getElementById('games-by-category-list');
+    const loadMoreCategoriesBtn = document.getElementById('loadMoreCategoriesBtn');
+    if (!gamesByCategoryList || !loadMoreCategoriesBtn) return;
+
+    let categoriesHtml = '';
+    const allCategoriesSorted = Object.keys(gamesByCategory).sort((a, b) => {
+        if (a === 'Uncategorized') return 1;
+        if (b === 'Uncategorized') return -1;
+        return a.localeCompare(b);
+    });
+
+    // Initialize displayed categories if first load or category list changed
+    if (displayedCategories.length === 0 || !allCategoriesSorted.slice(0, displayedCategories.length).every((cat, i) => cat === displayedCategories[i])) {
+        displayedCategories = allCategoriesSorted.slice(0, CATEGORY_CHUNK_SIZE);
+        // Reset games displayed count for all categories when categories are re-rendered
+        gamesDisplayedPerCategory = {};
+    }
+
+    displayedCategories.forEach(category => {
+        categoriesHtml += `<h3 class="col-span-2 text-xl font-bold mt-6 mb-3 text-gray-700">${escapeJsStringForHtmlAttribute(category)}</h3>`;
+        
+        // This div is just a container, the actual games grid is inside
+        categoriesHtml += `<div id="category-games-${category.replace(/\s/g, '_').replace(/[^a-zA-Z0-9_]/g, '')}" class="grid grid-cols-2 gap-4 mb-4">`;
+
+        const gamesInThisCategory = gamesByCategory[category];
+        const currentDisplayedCount = gamesDisplayedPerCategory[category] || GAME_CHUNK_SIZE;
+        
+        const gamesToDisplay = gamesInThisCategory.slice(0, currentDisplayedCount);
+
+        gamesToDisplay.forEach(game => {
+            categoriesHtml += `
+                <div class="bg-white rounded-xl shadow-lg overflow-hidden border border-orange-100 transform transition duration-300 hover:scale-105">
+                    <div class="h-32 bg-gray-200 relative">
+                        <img src="${escapeJsStringForHtmlAttribute(game.image_url || 'https://via.placeholder.com/300x200?text=Game')}" class="w-full h-full object-cover" onerror="this.onerror=null;this.src='https://via.placeholder.com/300x200?text=Game'">
+                        <div class="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/70 to-transparent p-2">
+                            <h3 class="text-white font-bold text-sm shadow-black drop-shadow-md">${escapeJsStringForHtmlAttribute(game.title)}</h3>
+                        </div>
+                    </div>
+                    <div class="p-3">
+                        <button onclick="checkLoginAndAct(event, 'playGameUrl', '${escapeJsStringForHtmlAttribute(game.game_url)}')" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-700 hover:to-yellow-600 py-2 rounded-lg font-bold text-sm shadow-md">
+                            <i class="fas fa-play mr-1"></i> PLAY NOW
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+        categoriesHtml += `</div>`; // Close grid for games
+
+        if (gamesInThisCategory.length > currentDisplayedCount) {
+            categoriesHtml += `
+                <div class="text-center mb-4">
+                    <button onclick="loadMoreGamesInCategory('${escapeJsStringForHtmlAttribute(category)}')" class="bg-orange-500 text-white px-4 py-2 rounded-full font-bold text-sm hover:bg-orange-600 transition-colors">More Games</button>
+                </div>`;
+        }
+    });
+    gamesByCategoryList.innerHTML = categoriesHtml;
+
+    if (allCategoriesSorted.length > displayedCategories.length) {
+        loadMoreCategoriesBtn.classList.remove('hidden');
+    } else {
+        loadMoreCategoriesBtn.classList.add('hidden');
+    }
+
+    if (allApprovedGames.length === 0) {
+        gamesByCategoryList.innerHTML = `<div class="col-span-2 text-center text-gray-500">No games available yet.</div>`;
+    }
+}
+
+/**
+ * Loads more categories onto the home page.
+ */
+function loadMoreCategories() {
+    const allCategoriesSorted = Object.keys(gamesByCategory).sort((a, b) => {
+        if (a === 'Uncategorized') return 1;
+        if (b === 'Uncategorized') return -1;
+        return a.localeCompare(b);
+    });
+    const currentCount = displayedCategories.length;
+    const nextBatch = allCategoriesSorted.slice(currentCount, currentCount + CATEGORY_CHUNK_SIZE);
+    if (nextBatch.length > 0) {
+        displayedCategories = [...displayedCategories, ...nextBatch];
+        renderGameCategories();
+    }
+}
+
+/**
+ * Loads more games within a specific category.
+ * @param {string} category - The category to load more games for.
+ */
+function loadMoreGamesInCategory(category) {
+    const gamesInThisCategory = gamesByCategory[category];
+    const currentDisplayedCount = gamesDisplayedPerCategory[category] || GAME_CHUNK_SIZE;
+    const newCount = currentDisplayedCount + GAME_CHUNK_SIZE;
+    gamesDisplayedPerCategory[category] = Math.min(newCount, gamesInThisCategory.length);
+    renderGameCategories(); // Re-render to update the specific category
+}
+
+/**
+ * Performs a search for games based on the search term.
+ * @param {string} searchTerm - The term to search for.
+ */
+function performSearch(searchTerm) {
+    searchResults = allApprovedGames.filter(game =>
+        game.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        game.category.toLowerCase().includes(searchTerm.toLowerCase())
+    ).sort((a, b) => a.title.localeCompare(b.title)); // Sort search results alphabetically
+    
+    searchGamesDisplayed = 0; // Reset display count for new search
+    displaySearchResults();
+    
+    document.getElementById('searchResultsContainer').classList.remove('hidden');
+    document.getElementById('gameCategoriesContainer').classList.add('hidden');
+}
+
+/**
+ * Displays search results, with an option to load more.
+ * @param {boolean} loadMore - Whether to append more results or clear and display fresh results.
+ */
+function displaySearchResults(loadMore = false) {
+    const searchResultsList = document.getElementById('searchResultsList');
+    const loadMoreSearchResultsBtn = document.getElementById('loadMoreSearchResults');
+    const noSearchResults = document.getElementById('noSearchResults');
+
+    if (!loadMore) {
+        searchResultsList.innerHTML = ''; // Clear previous results on new search
+    }
+
+    if (searchResults.length === 0) {
+        noSearchResults.classList.remove('hidden');
+        loadMoreSearchResultsBtn.classList.add('hidden');
+        searchResultsList.innerHTML = '';
+        return;
+    } else {
+        noSearchResults.classList.add('hidden');
+    }
+
+    const startIndex = searchGamesDisplayed;
+    const endIndex = Math.min(searchResults.length, startIndex + SEARCH_RESULT_CHUNK_SIZE);
+    const gamesToAdd = searchResults.slice(startIndex, endIndex);
+
+    let searchHtml = '';
+    gamesToAdd.forEach(game => {
+        searchHtml += `
+            <div class="bg-white rounded-xl shadow-lg overflow-hidden border border-orange-100 transform transition duration-300 hover:scale-105">
+                <div class="h-32 bg-gray-200 relative">
+                    <img src="${escapeJsStringForHtmlAttribute(game.image_url || 'https://via.placeholder.com/300x200?text=Game')}" class="w-full h-full object-cover" onerror="this.onerror=null;this.src='https://via.placeholder.com/300x200?text=Game'">
+                    <div class="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/70 to-transparent p-2">
+                        <h3 class="text-white font-bold text-sm shadow-black drop-shadow-md">${escapeJsStringForHtmlAttribute(game.title)}</h3>
+                    </div>
+                </div>
+                <div class="p-3">
+                    <button onclick="checkLoginAndAct(event, 'playGameUrl', '${escapeJsStringForHtmlAttribute(game.game_url)}')" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-700 hover:to-yellow-600 py-2 rounded-lg font-bold text-sm shadow-md">
+                        <i class="fas fa-play mr-1"></i> PLAY NOW
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+    searchResultsList.insertAdjacentHTML('beforeend', searchHtml);
+    searchGamesDisplayed = endIndex;
+
+    if (searchGamesDisplayed < searchResults.length) {
+        loadMoreSearchResultsBtn.classList.remove('hidden');
+    } else {
+        loadMoreSearchResultsBtn.classList.add('hidden');
+    }
+}
+
 
 /**
  * Renders the Home Page content dynamically.
@@ -400,8 +583,33 @@ async function renderHomePage(container) {
         <div class="p-4 bg-orange-50 min-h-screen">
             <h2 class="text-2xl font-black mb-4 text-gray-800">Play Games <span class="text-xs font-normal bg-green-100 text-green-700 px-2 py-1 rounded ml-2">Earn PKR 1/play</span></h2>
             
-            <div id="games-by-category-container" class="grid grid-cols-2 gap-4 mb-8"> <!-- Main grid for games -->
-                <div class="col-span-2 text-center py-10"><i class="fas fa-spinner fa-spin fa-2x text-red-500"></i><p class="mt-2 text-gray-400">Loading games...</p></div>
+            <!-- Search Bar -->
+            <div class="relative mb-6">
+                <input type="text" id="gameSearchInput" placeholder="Search games..." 
+                       class="w-full p-3 pl-10 pr-4 bg-white rounded-lg border border-gray-200 focus:outline-none focus:border-red-500 shadow-sm">
+                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+            </div>
+
+            <!-- Search Results Display (initially hidden) -->
+            <div id="searchResultsContainer" class="hidden">
+                <h3 class="text-xl font-bold mb-4 text-gray-700">Search Results</h3>
+                <div id="searchResultsList" class="grid grid-cols-2 gap-4 mb-8">
+                    <!-- Search results will be loaded here -->
+                </div>
+                <div id="searchResultsMoreBtnContainer" class="text-center mb-8">
+                    <button id="loadMoreSearchResults" class="bg-blue-500 text-white px-6 py-2 rounded-full font-bold hover:bg-blue-600 transition-colors hidden">Load More Games</button>
+                </div>
+                <p id="noSearchResults" class="text-center text-gray-500 italic py-4 hidden">No games found matching your search.</p>
+            </div>
+
+            <!-- Game Categories Display (default view) -->
+            <div id="gameCategoriesContainer">
+                <div id="games-by-category-list" class="mb-8">
+                    <div class="col-span-2 text-center py-10"><i class="fas fa-spinner fa-spin fa-2x text-red-500"></i><p class="mt-2 text-gray-400">Loading games...</p></div>
+                </div>
+                <div id="loadMoreCategoriesContainer" class="text-center mb-8">
+                    <button id="loadMoreCategoriesBtn" class="bg-red-500 text-white px-6 py-2 rounded-full font-bold hover:bg-red-600 transition-colors hidden">More Categories</button>
+                </div>
             </div>
 
             <!-- NEW: Live Event/Game Section -->
@@ -424,60 +632,68 @@ async function renderHomePage(container) {
             <div id="tournament-list" class="space-y-4"></div>
         </div>`;
 
-    const gamesByCategoryContainer = document.getElementById('games-by-category-container');
+    const searchInput = document.getElementById('gameSearchInput');
+    const searchResultsContainer = document.getElementById('searchResultsContainer');
+    const loadMoreSearchResultsBtn = document.getElementById('loadMoreSearchResults');
+    const gameCategoriesContainer = document.getElementById('gameCategoriesContainer');
+    const loadMoreCategoriesBtn = document.getElementById('loadMoreCategoriesBtn');
+    
+    // Reset global state for home page content display
+    allApprovedGames = [];
+    gamesByCategory = {};
+    displayedCategories = [];
+    gamesDisplayedPerCategory = {};
+    searchResults = [];
+    searchGamesDisplayed = 0;
 
     // Listener for games data (real-time updates)
     db.ref('games').on('value', snapshot => {
         const gamesData = snapshot.val();
-        if (!gamesByCategoryContainer) return;
+        allApprovedGames = [];
+        gamesByCategory = {};
 
-        if (!gamesData) {
-            gamesByCategoryContainer.innerHTML = `<div class="col-span-2 text-center text-gray-500">No games available yet.</div>`;
-            return;
-        }
-
-        const groupedGames = {};
-        Object.entries(gamesData).forEach(([id, game]) => {
-            // Use 'Uncategorized' if game.category is missing or empty
-            const category = (game.category && String(game.category).trim()) ? String(game.category).trim() : 'Uncategorized';
-            if (!groupedGames[category]) {
-                groupedGames[category] = [];
-            }
-            groupedGames[category].push({ id, ...game });
-        });
-
-        let gamesHtml = '';
-        // Sort categories alphabetically, put 'Uncategorized' last if it exists
-        const sortedCategories = Object.keys(groupedGames).sort((a, b) => {
-            if (a === 'Uncategorized') return 1;
-            if (b === 'Uncategorized') return -1;
-            return a.localeCompare(b);
-        });
-
-        sortedCategories.forEach(category => {
-            // Add category heading as a spanning item in the grid
-            gamesHtml += `<h3 class="col-span-2 text-xl font-bold mt-6 mb-3 text-gray-700">${escapeJsStringForHtmlAttribute(category)}</h3>`;
-            
-            // Add game cards for this category
-            groupedGames[category].sort((a, b) => a.title.localeCompare(b.title)).forEach(game => {
-                gamesHtml += `
-                    <div class="bg-white rounded-xl shadow-lg overflow-hidden border border-orange-100 transform transition duration-300 hover:scale-105">
-                        <div class="h-32 bg-gray-200 relative">
-                            <img src="${escapeJsStringForHtmlAttribute(game.image_url || 'https://via.placeholder.com/300x200?text=Game')}" class="w-full h-full object-cover">
-                            <div class="absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/70 to-transparent p-2">
-                                <h3 class="text-white font-bold text-sm shadow-black drop-shadow-md">${escapeJsStringForHtmlAttribute(game.title)}</h3>
-                            </div>
-                        </div>
-                        <div class="p-3">
-                            <button onclick="checkLoginAndAct(event, 'playGameUrl', '${escapeJsStringForHtmlAttribute(game.game_url)}')" class="w-full text-white bg-gradient-to-r from-red-600 to-yellow-500 hover:from-red-700 hover:to-yellow-600 py-2 rounded-lg font-bold text-sm shadow-md">
-                                <i class="fas fa-play mr-1"></i> PLAY NOW
-                            </button>
-                        </div>
-                    </div>
-                `;
+        if (gamesData) {
+            Object.entries(gamesData).forEach(([id, game]) => {
+                allApprovedGames.push({ id, ...game });
+                const category = (game.category && String(game.category).trim()) ? String(game.category).trim() : 'Uncategorized';
+                if (!gamesByCategory[category]) {
+                    gamesByCategory[category] = [];
+                }
+                gamesByCategory[category].push({ id, ...game });
             });
-        });
-        gamesByCategoryContainer.innerHTML = gamesHtml; // Replace spinner with actual content
+            // Sort games within each category
+            for (const category in gamesByCategory) {
+                gamesByCategory[category].sort((a, b) => a.title.localeCompare(b.title));
+            }
+        }
+        
+        // Initial render for categories (or search if input already has value)
+        const currentSearchTerm = searchInput.value.trim();
+        if (currentSearchTerm) {
+            performSearch(currentSearchTerm);
+        } else {
+            renderGameCategories(); // Initial call to render categories
+        }
+    });
+
+    searchInput.addEventListener('input', () => {
+        const searchTerm = searchInput.value.trim();
+        if (searchTerm.length > 0) {
+            performSearch(searchTerm);
+        } else {
+            // If search is cleared, hide search results and show categories
+            searchResultsContainer.classList.add('hidden');
+            gameCategoriesContainer.classList.remove('hidden');
+            renderGameCategories(); // Re-render categories if search is cleared
+        }
+    });
+
+    loadMoreSearchResultsBtn.addEventListener('click', () => {
+        displaySearchResults(true); // Load more
+    });
+
+    loadMoreCategoriesBtn.addEventListener('click', () => {
+        loadMoreCategories();
     });
 
     // Load Live Game Info
@@ -1653,7 +1869,7 @@ async function claimDailyBonus() {
         showToast('Login required to claim daily bonus!', true);
         return;
     }
-    if (!currentUserData || currentUserData.locked) {
+    if (!currentUserData || currentUserData.locked) { 
         auth.signOut();
         const lockReason = currentUserData?.lockReason ? `Reason: ${currentUserData.lockReason}` : '';
         return showToast(`Your account is locked. Please contact support. ${lockReason}`, true);
@@ -1912,7 +2128,7 @@ async function withdrawMoney(event) {
 
 /**
  * Handles adding a new game submitted by a user.
- * Deducts cost from wallet and adds game to Firebase.
+ * Deducts cost from wallet and adds game to Firebase `pending_games` node.
  * @param {Event} event - The form submission event.
  */
 async function addNewGame(event) {
@@ -1947,7 +2163,7 @@ async function addNewGame(event) {
 
     try {
         const userWalletRef = db.ref(`users/${user.uid}/wallet_balance`);
-        const gameRef = db.ref('games').push();
+        const pendingGameRef = db.ref('pending_games').push(); // Store in pending_games
         const transactionRef = db.ref(`transactions/${user.uid}`).push();
 
         let committed = false;
@@ -1962,25 +2178,27 @@ async function addNewGame(event) {
                 showToast("Failed to deduct game cost. Please try again.", true);
             } else if (_committed) {
                 committed = true;
-                await gameRef.set({
+                await pendingGameRef.set({
                     title: gameTitle,
                     image_url: gameImageUrl,
                     game_url: gameUrl,
                     category: gameCategory, 
                     created_by: user.uid,
-                    created_at: new Date().toISOString()
+                    created_by_username: currentUserData.username || 'N/A', // Add username for admin context
+                    created_at: new Date().toISOString(),
+                    status: 'pending' // Mark as pending for admin approval
                 });
                 await transactionRef.set({
                     amount: gameCost,
                     type: 'debit',
-                    description: `Cost to add new game: ${gameTitle}`,
+                    description: `Cost for game submission (pending approval): ${gameTitle}`,
                     created_at: new Date().toISOString()
                 });
 
-                showToast('Game added successfully and PKR 100 deducted from your wallet!');
+                showToast('Game submitted successfully! It will appear on the homepage after admin approval.');
                 toggleModal('addGameModal', false);
                 event.target.reset();
-                loadPageContent('homePage');
+                // No need to call loadPageContent('homePage') immediately as it's pending approval
             } else {
                 showToast(`Transaction aborted: Insufficient balance. You need ${formatCurrency(gameCost)} to add a game.`, true);
             }
@@ -1988,7 +2206,7 @@ async function addNewGame(event) {
 
     } catch (error) {
         console.error("Error adding game or deducting balance:", error);
-        showToast('Failed to add game. Please try again.', true);
+        showToast('Failed to submit game. Please try again.', true);
     }
 }
 
